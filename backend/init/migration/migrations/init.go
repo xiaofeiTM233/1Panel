@@ -281,3 +281,16 @@ var UpdateTableWebsite = &gormigrate.Migration{
 		return tx.AutoMigrate(&model.Website{})
 	},
 }
+
+var AddEntranceStatus = &gormigrate.Migration{
+	ID: "20230414-add-entrance-status",
+	Migrate: func(tx *gorm.DB) error {
+		if err := tx.Create(&model.Setting{Key: "SecurityEntranceStatus", Value: "disable"}).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&model.Setting{}).Where("key = ?", "SecurityEntrance").Updates(map[string]interface{}{"value": ""}).Error; err != nil {
+			return err
+		}
+		return tx.AutoMigrate(&model.Website{})
+	},
+}

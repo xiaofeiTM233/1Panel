@@ -1,11 +1,11 @@
 package router
 
 import (
-	"github.com/gin-contrib/gzip"
 	"html/template"
 	"net/http"
 
-	v1 "github.com/1Panel-dev/1Panel/backend/app/api/v1"
+	"github.com/gin-contrib/gzip"
+
 	"github.com/1Panel-dev/1Panel/backend/global"
 	"github.com/1Panel-dev/1Panel/backend/i18n"
 	"github.com/1Panel-dev/1Panel/backend/middleware"
@@ -55,8 +55,6 @@ func Routers() *gin.Engine {
 	setWebStatic(Router)
 
 	Router.Use(i18n.GinI18nLocalize())
-	Router.GET("/api/v1/info", v1.ApiGroupApp.BaseApi.GetSafetyStatus)
-	Router.GET("/api/v1/:code", v1.ApiGroupApp.BaseApi.SafeEntrance)
 
 	Router.SetFuncMap(template.FuncMap{
 		"Localize": ginI18n.GetMessage,
