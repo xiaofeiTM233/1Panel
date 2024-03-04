@@ -66,6 +66,8 @@ export namespace Host {
         pingStatus: string;
     }
     export interface RuleSearch extends ReqPage {
+        status: string;
+        strategy: string;
         info: string;
         type: string;
     }
@@ -75,8 +77,16 @@ export namespace Host {
         port: string;
         protocol: string;
         strategy: string;
-        appName: string;
-        isUsed: boolean;
+
+        usedStatus: string;
+        description: string;
+    }
+    export interface UpdateDescription {
+        address: string;
+        port: string;
+        protocol: string;
+        strategy: string;
+        description: string;
     }
     export interface RulePort {
         operation: string;
@@ -85,11 +95,13 @@ export namespace Host {
         source: string;
         protocol: string;
         strategy: string;
+        description: string;
     }
     export interface RuleIP {
         operation: string;
         address: string;
         strategy: string;
+        description: string;
     }
     export interface UpdatePortRule {
         oldRule: RulePort;
@@ -105,7 +117,9 @@ export namespace Host {
     }
 
     export interface SSHInfo {
+        autoStart: boolean;
         status: string;
+        message: string;
         port: string;
         listenAddress: string;
         passwordAuthentication: string;
@@ -115,6 +129,11 @@ export namespace Host {
         permitRootLogin: string;
         useDNS: string;
     }
+    export interface SSHUpdate {
+        key: string;
+        oldValue: string;
+        newValue: string;
+    }
     export interface SSHGenerate {
         encryptionMode: string;
         password: string;
@@ -123,14 +142,30 @@ export namespace Host {
         info: string;
         status: string;
     }
+    export interface analysisSSHLog extends ReqPage {
+        orderBy: string;
+    }
+    export interface logAnalysisRes {
+        total: number;
+        items: Array<logAnalysis>;
+        successfulCount: number;
+        failedCount: number;
+    }
     export interface sshLog {
         logs: Array<sshHistory>;
         successfulCount: number;
         failedCount: number;
     }
+    export interface logAnalysis {
+        address: string;
+        area: string;
+        successfulCount: number;
+        failedCount: number;
+        status: string;
+    }
     export interface sshHistory {
         date: Date;
-        isLocal: boolean;
+        area: string;
         user: string;
         authMode: string;
         address: string;

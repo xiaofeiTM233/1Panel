@@ -2,6 +2,8 @@ package v1
 
 import (
 	"errors"
+	"os"
+	"path"
 
 	"github.com/1Panel-dev/1Panel/backend/app/api/v1/helper"
 	"github.com/1Panel-dev/1Panel/backend/app/dto"
@@ -44,15 +46,10 @@ func (b *BaseApi) GetSystemAvailable(c *gin.Context) {
 // @Success 200
 // @Security ApiKeyAuth
 // @Router /settings/update [post]
-// @x-panel-log {"bodyKeys":["key","value"],"paramKeys":[],"BeforeFuntions":[],"formatZH":"修改系统配置 [key] => [value]","formatEN":"update system setting [key] => [value]"}
+// @x-panel-log {"bodyKeys":["key","value"],"paramKeys":[],"BeforeFunctions":[],"formatZH":"修改系统配置 [key] => [value]","formatEN":"update system setting [key] => [value]"}
 func (b *BaseApi) UpdateSetting(c *gin.Context) {
 	var req dto.SettingUpdate
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
-		return
-	}
-	if err := global.VALID.Struct(req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
 		return
 	}
 
@@ -71,15 +68,10 @@ func (b *BaseApi) UpdateSetting(c *gin.Context) {
 // @Success 200
 // @Security ApiKeyAuth
 // @Router /settings/password/update [post]
-// @x-panel-log {"bodyKeys":[],"paramKeys":[],"BeforeFuntions":[],"formatZH":"修改系统密码","formatEN":"update system password"}
+// @x-panel-log {"bodyKeys":[],"paramKeys":[],"BeforeFunctions":[],"formatZH":"修改系统密码","formatEN":"update system password"}
 func (b *BaseApi) UpdatePassword(c *gin.Context) {
 	var req dto.PasswordUpdate
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
-		return
-	}
-	if err := global.VALID.Struct(req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
 		return
 	}
 
@@ -98,15 +90,10 @@ func (b *BaseApi) UpdatePassword(c *gin.Context) {
 // @Success 200
 // @Security ApiKeyAuth
 // @Router /settings/ssl/update [post]
-// @x-panel-log {"bodyKeys":["ssl"],"paramKeys":[],"BeforeFuntions":[],"formatZH":"修改系统 ssl => [ssl]","formatEN":"update system ssl => [ssl]"}
+// @x-panel-log {"bodyKeys":["ssl"],"paramKeys":[],"BeforeFunctions":[],"formatZH":"修改系统 ssl => [ssl]","formatEN":"update system ssl => [ssl]"}
 func (b *BaseApi) UpdateSSL(c *gin.Context) {
 	var req dto.SSLUpdate
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
-		return
-	}
-	if err := global.VALID.Struct(req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
 		return
 	}
 
@@ -133,6 +120,60 @@ func (b *BaseApi) LoadFromCert(c *gin.Context) {
 }
 
 // @Tags System Setting
+// @Summary Download system cert
+// @Description 下载证书
+// @Success 200
+// @Security ApiKeyAuth
+// @Router /settings/ssl/download [post]
+func (b *BaseApi) DownloadSSL(c *gin.Context) {
+	pathItem := path.Join(global.CONF.System.BaseDir, "1panel/secret/server.crt")
+	if _, err := os.Stat(pathItem); err != nil {
+		helper.ErrorWithDetail(c, constant.CodeErrInternalServer, constant.ErrTypeInternalServer, err)
+		return
+	}
+
+	c.File(pathItem)
+}
+
+// @Tags System Setting
+// @Summary Load system address
+// @Description 获取系统地址信息
+// @Accept json
+// @Success 200
+// @Security ApiKeyAuth
+// @Router /settings/interface [get]
+func (b *BaseApi) LoadInterfaceAddr(c *gin.Context) {
+	data, err := settingService.LoadInterfaceAddr()
+	if err != nil {
+		helper.ErrorWithDetail(c, constant.CodeErrInternalServer, constant.ErrTypeInternalServer, err)
+		return
+	}
+	helper.SuccessWithData(c, data)
+}
+
+// @Tags System Setting
+// @Summary Update system bind info
+// @Description 更新系统监听信息
+// @Accept json
+// @Param request body dto.BindInfo true "request"
+// @Success 200
+// @Security ApiKeyAuth
+// @Router /settings/bind/update [post]
+// @x-panel-log {"bodyKeys":["ipv6", "bindAddress"],"paramKeys":[],"BeforeFunctions":[],"formatZH":"修改系统监听信息 => ipv6: [ipv6], 监听 IP: [bindAddress]","formatEN":"update system bind info => ipv6: [ipv6], 监听 IP: [bindAddress]"}
+func (b *BaseApi) UpdateBindInfo(c *gin.Context) {
+	var req dto.BindInfo
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
+		return
+	}
+
+	if err := settingService.UpdateBindInfo(req); err != nil {
+		helper.ErrorWithDetail(c, constant.CodeErrInternalServer, constant.ErrTypeInternalServer, err)
+		return
+	}
+	helper.SuccessWithData(c, nil)
+}
+
+// @Tags System Setting
 // @Summary Update system port
 // @Description 更新系统端口
 // @Accept json
@@ -140,15 +181,10 @@ func (b *BaseApi) LoadFromCert(c *gin.Context) {
 // @Success 200
 // @Security ApiKeyAuth
 // @Router /settings/port/update [post]
-// @x-panel-log {"bodyKeys":["serverPort"],"paramKeys":[],"BeforeFuntions":[],"formatZH":"修改系统端口 => [serverPort]","formatEN":"update system port => [serverPort]"}
+// @x-panel-log {"bodyKeys":["serverPort"],"paramKeys":[],"BeforeFunctions":[],"formatZH":"修改系统端口 => [serverPort]","formatEN":"update system port => [serverPort]"}
 func (b *BaseApi) UpdatePort(c *gin.Context) {
 	var req dto.PortUpdate
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
-		return
-	}
-	if err := global.VALID.Struct(req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
 		return
 	}
 
@@ -167,56 +203,14 @@ func (b *BaseApi) UpdatePort(c *gin.Context) {
 // @Success 200
 // @Security ApiKeyAuth
 // @Router /settings/expired/handle [post]
-// @x-panel-log {"bodyKeys":[],"paramKeys":[],"BeforeFuntions":[],"formatZH":"重置过期密码","formatEN":"reset an expired Password"}
+// @x-panel-log {"bodyKeys":[],"paramKeys":[],"BeforeFunctions":[],"formatZH":"重置过期密码","formatEN":"reset an expired Password"}
 func (b *BaseApi) HandlePasswordExpired(c *gin.Context) {
 	var req dto.PasswordUpdate
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
-		return
-	}
-	if err := global.VALID.Struct(req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
 		return
 	}
 
 	if err := settingService.HandlePasswordExpired(c, req.OldPassword, req.NewPassword); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrInternalServer, constant.ErrTypeInternalServer, err)
-		return
-	}
-	helper.SuccessWithData(c, nil)
-}
-
-// @Tags System Setting
-// @Summary Load time zone options
-// @Description 加载系统可用时区
-// @Success 200
-// @Security ApiKeyAuth
-// @Router /settings/time/option [get]
-func (b *BaseApi) LoadTimeZone(c *gin.Context) {
-	zones, err := settingService.LoadTimeZone()
-	if err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrInternalServer, constant.ErrTypeInternalServer, err)
-		return
-	}
-	helper.SuccessWithData(c, zones)
-}
-
-// @Tags System Setting
-// @Summary Sync system time
-// @Description 系统时间同步
-// @Accept json
-// @Param request body dto.SyncTime true "request"
-// @Success 200 {string} ntime
-// @Security ApiKeyAuth
-// @Router /settings/time/sync [post]
-// @x-panel-log {"bodyKeys":["ntpSite"],"paramKeys":[],"BeforeFuntions":[],"formatZH":"系统时间同步[ntpSite]","formatEN":"sync system time [ntpSite]"}
-func (b *BaseApi) SyncTime(c *gin.Context) {
-	var req dto.SyncTime
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
-		return
-	}
-	if err := settingService.SyncTime(req); err != nil {
 		helper.ErrorWithDetail(c, constant.CodeErrInternalServer, constant.ErrTypeInternalServer, err)
 		return
 	}
@@ -239,7 +233,7 @@ func (b *BaseApi) LoadBaseDir(c *gin.Context) {
 // @Success 200
 // @Security ApiKeyAuth
 // @Router /settings/monitor/clean [post]
-// @x-panel-log {"bodyKeys":[],"paramKeys":[],"BeforeFuntions":[],"formatZH":"清空监控数据","formatEN":"clean monitor datas"}
+// @x-panel-log {"bodyKeys":[],"paramKeys":[],"BeforeFunctions":[],"formatZH":"清空监控数据","formatEN":"clean monitor datas"}
 func (b *BaseApi) CleanMonitor(c *gin.Context) {
 	if err := global.DB.Exec("DELETE FROM monitor_bases").Error; err != nil {
 		helper.ErrorWithDetail(c, constant.CodeErrInternalServer, constant.ErrTypeInternalServer, err)
@@ -260,11 +254,18 @@ func (b *BaseApi) CleanMonitor(c *gin.Context) {
 // @Tags System Setting
 // @Summary Load mfa info
 // @Description 获取 mfa 信息
+// @Accept json
+// @Param request body dto.MfaCredential true "request"
 // @Success 200 {object} mfa.Otp
 // @Security ApiKeyAuth
-// @Router /settings/mfa [get]
-func (b *BaseApi) GetMFA(c *gin.Context) {
-	otp, err := mfa.GetOtp("admin")
+// @Router /settings/mfa [post]
+func (b *BaseApi) LoadMFA(c *gin.Context) {
+	var req dto.MfaRequest
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
+		return
+	}
+
+	otp, err := mfa.GetOtp("admin", req.Title, req.Interval)
 	if err != nil {
 		helper.ErrorWithDetail(c, constant.CodeErrInternalServer, constant.ErrTypeInternalServer, err)
 		return
@@ -281,16 +282,21 @@ func (b *BaseApi) GetMFA(c *gin.Context) {
 // @Success 200
 // @Security ApiKeyAuth
 // @Router /settings/mfa/bind [post]
-// @x-panel-log {"bodyKeys":[],"paramKeys":[],"BeforeFuntions":[],"formatZH":"mfa 绑定","formatEN":"bind mfa"}
+// @x-panel-log {"bodyKeys":[],"paramKeys":[],"BeforeFunctions":[],"formatZH":"mfa 绑定","formatEN":"bind mfa"}
 func (b *BaseApi) MFABind(c *gin.Context) {
 	var req dto.MfaCredential
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
 		return
 	}
-	success := mfa.ValidCode(req.Code, req.Secret)
+
+	success := mfa.ValidCode(req.Code, req.Interval, req.Secret)
 	if !success {
 		helper.ErrorWithDetail(c, constant.CodeErrInternalServer, constant.ErrTypeInternalServer, errors.New("code is not valid"))
+		return
+	}
+
+	if err := settingService.Update("MFAInterval", req.Interval); err != nil {
+		helper.ErrorWithDetail(c, constant.CodeErrInternalServer, constant.ErrTypeInternalServer, err)
 		return
 	}
 

@@ -1,6 +1,6 @@
 <template>
     <el-drawer
-        v-model="drawerVisiable"
+        v-model="drawerVisible"
         @close="onCloseLog"
         :destroy-on-close="true"
         :close-on-click-modal="false"
@@ -21,7 +21,7 @@
                         :rules="Rules.requiredSelect"
                         prop="repoID"
                     >
-                        <el-select style="width: 100%" filterable v-model="form.repoID">
+                        <el-select clearable style="width: 100%" filterable v-model="form.repoID">
                             <el-option v-for="item in repos" :key="item.id" :value="item.id" :label="item.name" />
                         </el-select>
                     </el-form-item>
@@ -31,28 +31,18 @@
                         </el-input>
                     </el-form-item>
                 </el-form>
-
-                <codemirror
-                    v-if="logVisiable"
-                    :autofocus="true"
-                    placeholder="Waiting for pull output..."
-                    :indent-with-tab="true"
-                    :tabSize="4"
-                    style="height: calc(100vh - 415px)"
-                    :lineWrapping="true"
-                    :matchBrackets="true"
-                    theme="cobalt"
-                    :styleActiveLine="true"
-                    :extensions="extensions"
-                    @ready="handleReady"
-                    v-model="logInfo"
-                    :disabled="true"
+                <LogFile
+                    ref="logRef"
+                    :config="logConfig"
+                    :default-button="false"
+                    v-if="showLog"
+                    :style="'height: calc(100vh - 397px);min-height: 200px'"
                 />
             </el-col>
         </el-row>
         <template #footer>
             <span class="dialog-footer">
-                <el-button @click="drawerVisiable = false">
+                <el-button @click="drawerVisible = false">
                     {{ $t('commons.button.cancel') }}
                 </el-button>
                 <el-button :disabled="buttonDisabled" type="primary" @click="onSubmit(formRef)">
@@ -64,37 +54,31 @@
 </template>
 
 <script lang="ts" setup>
-import { nextTick, onBeforeUnmount, reactive, ref, shallowRef } from 'vue';
+import { nextTick, reactive, ref } from 'vue';
 import { Rules } from '@/global/form-rules';
 import i18n from '@/lang';
 import { ElForm } from 'element-plus';
 import { imagePull } from '@/api/modules/container';
 import { Container } from '@/api/interface/container';
-import { Codemirror } from 'vue-codemirror';
-import { javascript } from '@codemirror/lang-javascript';
-import { oneDark } from '@codemirror/theme-one-dark';
-import { LoadFile } from '@/api/modules/files';
 import DrawerHeader from '@/components/drawer-header/index.vue';
-import { formatImageStdout } from '@/utils/docker';
 import { MsgSuccess } from '@/utils/message';
+import LogFile from '@/components/log-file/index.vue';
 
-const drawerVisiable = ref(false);
+const drawerVisible = ref(false);
 const form = reactive({
     fromRepo: true,
     repoID: null as number,
     imageName: '',
 });
-
+const logConfig = reactive({
+    type: 'image-pull',
+    name: '',
+});
+const showLog = ref(false);
+const logRef = ref();
 const buttonDisabled = ref(false);
-
-const logVisiable = ref(false);
+const logVisible = ref(false);
 const logInfo = ref();
-const view = shallowRef();
-const handleReady = (payload) => {
-    view.value = payload.view;
-};
-const extensions = [javascript(), oneDark];
-let timer: NodeJS.Timer | null = null;
 
 interface DialogProps {
     repos: Array<Container.RepoOptions>;
@@ -102,13 +86,14 @@ interface DialogProps {
 const repos = ref();
 
 const acceptParams = async (params: DialogProps): Promise<void> => {
-    logVisiable.value = false;
-    drawerVisiable.value = true;
+    logVisible.value = false;
+    drawerVisible.value = true;
     form.fromRepo = true;
     form.imageName = '';
     repos.value = params.repos;
     buttonDisabled.value = false;
     logInfo.value = '';
+    showLog.value = false;
 };
 const emit = defineEmits<{ (e: 'search'): void }>();
 
@@ -123,38 +108,27 @@ const onSubmit = async (formEl: FormInstance | undefined) => {
             form.repoID = 0;
         }
         const res = await imagePull(form);
-        logVisiable.value = true;
+        logVisible.value = true;
         buttonDisabled.value = true;
-        loadLogs(res.data);
+        logConfig.name = res.data;
+        search();
         MsgSuccess(i18n.global.t('commons.msg.operationSuccess'));
     });
 };
 
-const loadLogs = async (path: string) => {
-    timer = setInterval(async () => {
-        if (logVisiable.value) {
-            const res = await LoadFile({ path: path });
-            logInfo.value = formatImageStdout(res.data);
-            nextTick(() => {
-                const state = view.value.state;
-                view.value.dispatch({
-                    selection: { anchor: state.doc.length, head: state.doc.length },
-                    scrollIntoView: true,
-                });
-            });
-            if (logInfo.value.endsWith('image pull failed!') || logInfo.value.endsWith('image pull successful!')) {
-                clearInterval(Number(timer));
-                timer = null;
-                buttonDisabled.value = false;
-            }
-        }
-    }, 1000 * 3);
+const search = () => {
+    showLog.value = false;
+    nextTick(() => {
+        showLog.value = true;
+        nextTick(() => {
+            logRef.value.changeTail(true);
+        });
+    });
 };
+
 const onCloseLog = async () => {
     emit('search');
-    clearInterval(Number(timer));
-    timer = null;
-    drawerVisiable.value = false;
+    drawerVisible.value = false;
 };
 
 function loadDetailInfo(id: number) {
@@ -165,11 +139,6 @@ function loadDetailInfo(id: number) {
     }
     return '';
 }
-
-onBeforeUnmount(() => {
-    clearInterval(Number(timer));
-    timer = null;
-});
 
 defineExpose({
     acceptParams,

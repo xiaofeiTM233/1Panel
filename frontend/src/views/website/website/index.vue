@@ -32,17 +32,7 @@
                         </el-button>
                     </el-col>
                     <el-col :xs="24" :sm="4" :md="4" :lg="4" :xl="4">
-                        <div class="search-button">
-                            <el-input
-                                v-model="req.name"
-                                clearable
-                                @clear="search()"
-                                suffix-icon="Search"
-                                @keyup.enter="search()"
-                                @change="search()"
-                                :placeholder="$t('commons.button.search')"
-                            ></el-input>
-                        </div>
+                        <TableSearch @search="search()" v-model:searchName="req.name" />
                     </el-col>
                 </el-row>
             </template>
@@ -64,19 +54,36 @@
                 <ComplexTable
                     :pagination-config="paginationConfig"
                     :data="data"
+                    @sort-change="search"
                     @search="search()"
                     :class="{ mask: nginxStatus != 'Running' }"
                 >
-                    <el-table-column :label="$t('commons.table.name')" fix prop="primaryDomain" min-width="120px">
+                    <el-table-column
+                        :label="$t('commons.table.name')"
+                        fix
+                        prop="primaryDomain"
+                        min-width="120px"
+                        :width="mobile ? 220 : 'auto'"
+                        sortable
+                    >
                         <template #default="{ row }">
                             <Tooltip @click="openConfig(row.id)" :text="row.primaryDomain" />
                         </template>
                     </el-table-column>
-                    <el-table-column :label="$t('commons.table.type')" fix show-overflow-tooltip prop="type">
+                    <el-table-column
+                        min-width="120px"
+                        :label="$t('commons.table.type')"
+                        fix
+                        show-overflow-tooltip
+                        prop="type"
+                        sortable
+                    >
                         <template #default="{ row }">
-                            {{ $t('website.' + row.type) }}
-                            <span v-if="row.type === 'deployment'">[{{ row.appName }}]</span>
-                            <span v-if="row.type === 'runtime'">[{{ row.runtimeName }}]</span>
+                            <div v-if="row.type">
+                                {{ $t('website.' + row.type) }}
+                                <span v-if="row.type === 'deployment'">[{{ row.appName }}]</span>
+                                <span v-if="row.type === 'runtime'">[{{ row.runtimeName }}]</span>
+                            </div>
                         </template>
                     </el-table-column>
                     <el-table-column :label="$t('website.sitePath')" prop="sitePath">
@@ -88,7 +95,7 @@
                             </el-button>
                         </template>
                     </el-table-column>
-                    <el-table-column :label="$t('commons.table.status')" prop="status" width="100px">
+                    <el-table-column :label="$t('commons.table.status')" prop="status" width="120px" sortable>
                         <template #default="{ row }">
                             <el-button
                                 v-if="row.status === 'Running'"
@@ -104,12 +111,16 @@
                             </el-button>
                         </template>
                     </el-table-column>
-                    <el-table-column :label="$t('website.remark')" prop="remark">
+                    <el-table-column :label="$t('website.remark')" prop="remark" min-width="120px">
                         <template #default="{ row }">
                             <MsgInfo :info="row.remark" />
                         </template>
                     </el-table-column>
-                    <el-table-column :label="$t('website.protocol')" prop="protocol" width="90px"></el-table-column>
+                    <el-table-column
+                        :label="$t('commons.table.protocol')"
+                        prop="protocol"
+                        width="90px"
+                    ></el-table-column>
                     <el-table-column :label="$t('website.expireDate')">
                         <template #default="{ row, $index }">
                             <div v-show="row.showdate">
@@ -164,7 +175,6 @@
 </template>
 
 <script lang="ts" setup>
-import Tooltip from '@/components/tooltip/index.vue';
 import Backups from '@/components/backup/index.vue';
 import UploadDialog from '@/components/upload/index.vue';
 import DefaultServer from '@/views/website/website/default/index.vue';
@@ -225,22 +235,28 @@ let dateRefs: Map<number, any> = new Map();
 let groups = ref<Group.GroupInfo[]>([]);
 
 const paginationConfig = reactive({
+    cacheSizeKey: 'website-page-size',
     currentPage: 1,
-    pageSize: 10,
+    pageSize: Number(localStorage.getItem('website-page-size')) || 10,
     total: 0,
 });
 let req = reactive({
     name: '',
     page: 1,
     pageSize: 10,
+    orderBy: 'created_at',
+    order: 'null',
     websiteGroupId: 0,
 });
 const mobile = computed(() => {
     return globalStore.isMobile();
 });
-const search = async () => {
+const search = async (column?: any) => {
     req.page = paginationConfig.currentPage;
     req.pageSize = paginationConfig.pageSize;
+    req.orderBy = column?.order ? column.prop : 'created_at';
+    req.orderBy = req.orderBy === 'primaryDomain' ? 'primary_domain' : req.orderBy;
+    req.order = column?.order ? column.order : 'null';
     loading.value = true;
     await SearchWebsites(req)
         .then((res) => {
@@ -323,6 +339,7 @@ const submitDate = (row: any) => {
         remark: row.remark,
         webSiteGroupId: row.webSiteGroupId,
         expireDate: reqDate,
+        IPV6: row.IPV6,
     };
 
     UpdateWebsite(req).then(() => {
@@ -351,7 +368,7 @@ const buttons = [
             let params = {
                 type: 'website',
                 name: row.primaryDomain,
-                detailName: '',
+                detailName: row.alias,
             };
             dialogBackupRef.value!.acceptParams(params);
         },
@@ -362,13 +379,13 @@ const buttons = [
             let params = {
                 type: 'website',
                 name: row.primaryDomain,
-                detailName: '',
+                detailName: row.alias,
             };
             uploadRef.value!.acceptParams(params);
         },
     },
     {
-        label: i18n.global.t('app.delete'),
+        label: i18n.global.t('commons.button.delete'),
         click: function (row: Website.Website) {
             openDelete(row);
         },
@@ -423,9 +440,3 @@ onMounted(() => {
     listGroup();
 });
 </script>
-<style lang="scss" scoped>
-.search-button {
-    float: right;
-    display: inline;
-}
-</style>

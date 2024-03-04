@@ -1,15 +1,22 @@
 <template>
     <div>
         <el-drawer
-            v-model="drawerVisiable"
+            v-model="drawerVisible"
             :destroy-on-close="true"
             @close="handleClose"
             :close-on-click-modal="false"
-            size="30%"
+            size="50%"
         >
             <template #header>
-                <DrawerHeader header="https" :back="handleClose" />
+                <DrawerHeader :header="$t('setting.panelSSL')" :back="handleClose" />
             </template>
+            <el-alert class="common-prompt" :closable="false" type="error">
+                <template #default>
+                    <span>
+                        <span>{{ $t('setting.panelSSLHelper') }}</span>
+                    </span>
+                </template>
+            </el-alert>
             <el-form ref="formRef" label-position="top" :model="form" :rules="rules" v-loading="loading">
                 <el-row type="flex" justify="center">
                     <el-col :span="22">
@@ -17,11 +24,17 @@
                             <el-radio-group v-model="form.sslType">
                                 <el-radio label="self">{{ $t('setting.selfSigned') }}</el-radio>
                                 <el-radio label="select">{{ $t('setting.select') }}</el-radio>
-                                <el-radio label="import">{{ $t('setting.import') }}</el-radio>
+                                <el-radio label="import">{{ $t('commons.button.import') }}</el-radio>
                             </el-radio-group>
                             <span class="input-help" v-if="form.sslType === 'self'">
                                 {{ $t('setting.selfSignedHelper') }}
                             </span>
+                        </el-form-item>
+                        <el-form-item v-if="form.sslType === 'import'" :label="$t('commons.button.import')" prop="type">
+                            <el-select v-model="form.itemSSLType">
+                                <el-option :label="$t('website.pasteSSL')" value="paste"></el-option>
+                                <el-option :label="$t('website.localSSL')" value="local"></el-option>
+                            </el-select>
                         </el-form-item>
 
                         <el-form-item v-if="form.timeout">
@@ -39,12 +52,29 @@
                             </el-button>
                         </el-form-item>
 
-                        <div v-if="form.sslType === 'import'">
+                        <div v-if="form.sslType === 'import' && form.itemSSLType === 'paste'">
                             <el-form-item :label="$t('website.privateKey')" prop="key">
-                                <el-input v-model="form.key" :autosize="{ minRows: 5, maxRows: 10 }" type="textarea" />
+                                <el-input v-model="form.key" :rows="5" type="textarea" />
                             </el-form-item>
-                            <el-form-item class="margintop" :label="$t('website.certificate')" prop="cert">
-                                <el-input v-model="form.cert" :autosize="{ minRows: 5, maxRows: 10 }" type="textarea" />
+                            <el-form-item class="marginTop" :label="$t('website.certificate')" prop="cert">
+                                <el-input v-model="form.cert" :rows="5" type="textarea" />
+                            </el-form-item>
+                        </div>
+
+                        <div v-if="form.sslType === 'import' && form.itemSSLType === 'local'">
+                            <el-form-item :label="$t('website.privateKey')" prop="key">
+                                <el-input v-model="form.key">
+                                    <template #prepend>
+                                        <FileList @choose="getKeyPath" :dir="false"></FileList>
+                                    </template>
+                                </el-input>
+                            </el-form-item>
+                            <el-form-item class="marginTop" :label="$t('website.certificate')" prop="cert">
+                                <el-input v-model="form.cert">
+                                    <template #prepend>
+                                        <FileList @choose="getCertPath" :dir="false"></FileList>
+                                    </template>
+                                </el-input>
                             </el-form-item>
                         </div>
 
@@ -60,7 +90,7 @@
                                 </el-select>
                             </el-form-item>
                             <el-descriptions
-                                class="margintop"
+                                class="marginTop"
                                 :column="5"
                                 border
                                 direction="vertical"
@@ -91,7 +121,7 @@
             </el-form>
             <template #footer>
                 <span class="dialog-footer">
-                    <el-button @click="drawerVisiable = false">{{ $t('commons.button.cancel') }}</el-button>
+                    <el-button @click="drawerVisible = false">{{ $t('commons.button.cancel') }}</el-button>
                     <el-button :disabled="loading" type="primary" @click="onSaveSSL(formRef)">
                         {{ $t('commons.button.confirm') }}
                     </el-button>
@@ -107,21 +137,22 @@ import { ListSSL } from '@/api/modules/website';
 import { reactive, ref } from 'vue';
 import i18n from '@/lang';
 import { MsgSuccess } from '@/utils/message';
-import { updateSSL } from '@/api/modules/setting';
-import { DownloadByPath } from '@/api/modules/files';
+import { downloadSSL, updateSSL } from '@/api/modules/setting';
 import { Rules } from '@/global/form-rules';
 import { ElMessageBox, FormInstance } from 'element-plus';
 import { Setting } from '@/api/interface/setting';
+import DrawerHeader from '@/components/drawer-header/index.vue';
 import { GlobalStore } from '@/store';
 const globalStore = GlobalStore();
 
 const loading = ref();
-const drawerVisiable = ref();
+const drawerVisible = ref();
 
 const form = reactive({
     ssl: 'enable',
     domain: '',
     sslType: 'self',
+    itemSSLType: 'paste',
     sslID: null as number,
     cert: '',
     key: '',
@@ -145,7 +176,12 @@ interface DialogProps {
     sslInfo?: Setting.SSLInfo;
 }
 const acceptParams = async (params: DialogProps): Promise<void> => {
-    form.sslType = params.sslType;
+    if (params.sslType.indexOf('-') !== -1) {
+        form.sslType = 'import';
+        form.itemSSLType = params.sslType.split('-')[1];
+    } else {
+        form.sslType = params.sslType;
+    }
     form.cert = params.sslInfo?.cert || '';
     form.key = params.sslInfo?.key || '';
     form.rootPath = params.sslInfo?.rootPath || '';
@@ -160,7 +196,7 @@ const acceptParams = async (params: DialogProps): Promise<void> => {
     } else {
         loadSSLs();
     }
-    drawerVisiable.value = true;
+    drawerVisible.value = true;
 };
 const emit = defineEmits<{ (e: 'search'): void }>();
 
@@ -176,15 +212,24 @@ const changeSSl = (sslid: number) => {
     itemSSL.value = res[0];
 };
 
+const getKeyPath = (path: string) => {
+    form.key = path;
+};
+
+const getCertPath = (path: string) => {
+    form.cert = path;
+};
+
 const onDownload = async () => {
-    const file = await DownloadByPath(form.rootPath);
-    const downloadUrl = window.URL.createObjectURL(new Blob([file]));
-    const a = document.createElement('a');
-    a.style.display = 'none';
-    a.href = downloadUrl;
-    a.download = 'server.crt';
-    const event = new MouseEvent('click');
-    a.dispatchEvent(event);
+    await downloadSSL().then(async (file) => {
+        const downloadUrl = window.URL.createObjectURL(new Blob([file]));
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = downloadUrl;
+        a.download = 'server.crt';
+        const event = new MouseEvent('click');
+        a.dispatchEvent(event);
+    });
 };
 
 const onSaveSSL = async (formEl: FormInstance | undefined) => {
@@ -196,9 +241,13 @@ const onSaveSSL = async (formEl: FormInstance | undefined) => {
             cancelButtonText: i18n.global.t('commons.button.cancel'),
             type: 'info',
         }).then(async () => {
+            let itemType = form.sslType;
+            if (form.sslType === 'import') {
+                itemType = form.itemSSLType === 'paste' ? 'import-paste' : 'import-local';
+            }
             let param = {
                 ssl: 'enable',
-                sslType: form.sslType,
+                sslType: itemType,
                 domain: '',
                 sslID: form.sslID,
                 cert: form.cert,
@@ -211,7 +260,11 @@ const onSaveSSL = async (formEl: FormInstance | undefined) => {
                 let href = window.location.href;
                 globalStore.isLogin = false;
                 let address = href.split('://')[1];
-                address = address.replaceAll('settings/safe', globalStore.entrance);
+                if (globalStore.entrance) {
+                    address = address.replaceAll('settings/safe', globalStore.entrance);
+                } else {
+                    address = address.replaceAll('settings/safe', 'login');
+                }
                 window.open(`https://${address}`, '_self');
             });
         });
@@ -220,7 +273,7 @@ const onSaveSSL = async (formEl: FormInstance | undefined) => {
 
 const handleClose = () => {
     emit('search');
-    drawerVisiable.value = false;
+    drawerVisible.value = false;
 };
 
 defineExpose({
@@ -229,7 +282,7 @@ defineExpose({
 </script>
 
 <style scoped lang="scss">
-.margintop {
+.marginTop {
     margin-top: 10px;
 }
 </style>

@@ -20,6 +20,9 @@ export namespace Website {
         rewrite: string;
         user: string;
         group: string;
+        IPV6: boolean;
+        accessLog?: boolean;
+        errorLog?: boolean;
     }
 
     export interface WebsiteDTO extends Website {
@@ -38,6 +41,8 @@ export namespace Website {
 
     export interface WebSiteSearch extends ReqPage {
         name: string;
+        orderBy: string;
+        order: string;
         websiteGroupId: number;
     }
 
@@ -67,6 +72,7 @@ export namespace Website {
         remark: string;
         webSiteGroupId: number;
         expireDate?: string;
+        IPV6: boolean;
     }
 
     export interface WebSiteOp {
@@ -78,11 +84,15 @@ export namespace Website {
         id: number;
         operate: string;
         logType: string;
+        page?: number;
+        pageSize?: number;
     }
 
     export interface WebSiteLog {
         enable: boolean;
         content: string;
+        end: boolean;
+        path: string;
     }
 
     export interface Domain {
@@ -93,9 +103,8 @@ export namespace Website {
     }
 
     export interface DomainCreate {
-        websiteId: number;
-        port: number;
-        domain: string;
+        websiteID: number;
+        domains: string;
     }
 
     export interface DomainDelete {
@@ -156,6 +165,14 @@ export namespace Website {
         provider: string;
         websites?: Website.Website[];
         autoRenew: boolean;
+        acmeAccountId?: number;
+        status: string;
+        domains: string;
+        description: string;
+    }
+
+    export interface SSLDTO extends SSL {
+        logPath: string;
     }
 
     export interface SSLCreate {
@@ -164,6 +181,8 @@ export namespace Website {
         provider: string;
         acmeAccountId: number;
         dnsAccountId: number;
+        id?: number;
+        description: string;
     }
 
     export interface SSLApply {
@@ -178,11 +197,13 @@ export namespace Website {
     export interface SSLUpdate {
         id: number;
         autoRenew: boolean;
+        description: string;
     }
 
     export interface AcmeAccount extends CommonModel {
         email: string;
         url: string;
+        type: string;
     }
 
     export interface AcmeAccountCreate {
@@ -203,6 +224,7 @@ export namespace Website {
 
     export interface SSLReq {
         name?: string;
+        acmeAccountID?: string;
     }
 
     export interface HTTPSReq {
@@ -244,7 +266,6 @@ export namespace Website {
 
     export interface WafRes {
         enable: boolean;
-        filePath: string;
         content: string;
     }
 
@@ -252,6 +273,12 @@ export namespace Website {
         enable: boolean;
         websiteId: number;
         key: string;
+    }
+
+    export interface WafFileUpdate {
+        websiteId: number;
+        type: string;
+        content: string;
     }
 
     export interface DelReq {
@@ -332,6 +359,8 @@ export namespace Website {
         filePath?: string;
         replaces?: ProxReplace;
         content?: string;
+        proxyAddress?: string;
+        proxyProtocol?: string;
     }
 
     export interface ProxReplace {
@@ -364,5 +393,122 @@ export namespace Website {
         username: string;
         password: string;
         remark: string;
+    }
+
+    export interface LeechConfig {
+        enable: boolean;
+        cache: boolean;
+        cacheTime: number;
+        cacheUint: string;
+        extends: string;
+        return: string;
+        serverNames: string[];
+        noneRef: boolean;
+        logEnable: boolean;
+        blocked: boolean;
+        websiteID?: number;
+    }
+
+    export interface LeechReq {
+        websiteID: number;
+    }
+
+    export interface WebsiteReq {
+        websiteID: number;
+    }
+
+    export interface RedirectConfig {
+        operate: string;
+        websiteID: number;
+        domains?: string[];
+        enable: boolean;
+        name: string;
+        keepPath: boolean;
+        type: string;
+        redirect: string;
+        path?: string;
+        target: string;
+        redirectRoot?: boolean;
+        filePath?: string;
+        content?: string;
+    }
+
+    export interface RedirectFileUpdate {
+        websiteID: number;
+        name: string;
+        content: string;
+    }
+
+    export interface PHPVersionChange {
+        websiteID: number;
+        runtimeID: number;
+        retainConfig: boolean;
+    }
+
+    export interface DirConfig {
+        dirs: string[];
+        user: string;
+        userGroup: string;
+        msg: string;
+    }
+
+    export interface SSLUpload {
+        privateKey: string;
+        certificate: string;
+        privateKeyPath: string;
+        certificatePath: string;
+        type: string;
+        sslID: number;
+    }
+
+    export interface SSLObtain {
+        ID: number;
+        skipDNSCheck: boolean;
+    }
+
+    export interface CA extends CommonModel {
+        name: string;
+        csr: string;
+        privateKey: string;
+        keyType: string;
+    }
+
+    export interface CACreate {
+        name: string;
+        commonName: string;
+        country: string;
+        organization: string;
+        organizationUint: string;
+        keyType: string;
+        province: string;
+        city: string;
+    }
+
+    export interface CADTO extends CA {
+        commonName: string;
+        country: string;
+        organization: string;
+        organizationUint: string;
+        province: string;
+        city: string;
+    }
+
+    export interface SSLObtainByCA {
+        id: number;
+        domains: string;
+        keyType: string;
+        time: number;
+        unit: string;
+        pushDir: boolean;
+        dir: string;
+        description: string;
+    }
+
+    export interface RenewSSLByCA {
+        SSLID: number;
+    }
+
+    export interface SSLDownload {
+        id: number;
     }
 }

@@ -1,6 +1,6 @@
 <template>
     <div>
-        <el-drawer v-model="drawerVisiable" :destroy-on-close="true" :close-on-click-modal="false" size="30%">
+        <el-drawer v-model="drawerVisible" :destroy-on-close="true" :close-on-click-modal="false" size="30%">
             <template #header>
                 <DrawerHeader :header="$t('setting.sessionTimeout')" :back="handleClose" />
             </template>
@@ -22,7 +22,7 @@
             </el-form>
             <template #footer>
                 <span class="dialog-footer">
-                    <el-button @click="drawerVisiable = false">{{ $t('commons.button.cancel') }}</el-button>
+                    <el-button @click="drawerVisible = false">{{ $t('commons.button.cancel') }}</el-button>
                     <el-button :disabled="loading" type="primary" @click="onSaveTimeout(formRef)">
                         {{ $t('commons.button.confirm') }}
                     </el-button>
@@ -37,6 +37,7 @@ import i18n from '@/lang';
 import { MsgSuccess } from '@/utils/message';
 import { FormInstance } from 'element-plus';
 import { Rules, checkNumberRange } from '@/global/form-rules';
+import DrawerHeader from '@/components/drawer-header/index.vue';
 import { updateSetting } from '@/api/modules/setting';
 
 const emit = defineEmits<{ (e: 'search'): void }>();
@@ -44,7 +45,7 @@ const emit = defineEmits<{ (e: 'search'): void }>();
 interface DialogProps {
     sessionTimeout: number;
 }
-const drawerVisiable = ref();
+const drawerVisible = ref();
 const loading = ref();
 
 const form = reactive({
@@ -59,7 +60,7 @@ const formRef = ref<FormInstance>();
 
 const acceptParams = (params: DialogProps): void => {
     form.sessionTimeout = params.sessionTimeout;
-    drawerVisiable.value = true;
+    drawerVisible.value = true;
 };
 
 const onSaveTimeout = async (formEl: FormInstance | undefined) => {
@@ -70,7 +71,7 @@ const onSaveTimeout = async (formEl: FormInstance | undefined) => {
             .then(async () => {
                 MsgSuccess(i18n.global.t('commons.msg.operationSuccess'));
                 loading.value = false;
-                drawerVisiable.value = false;
+                drawerVisible.value = false;
                 emit('search');
                 return;
             })
@@ -81,7 +82,7 @@ const onSaveTimeout = async (formEl: FormInstance | undefined) => {
 };
 
 const handleClose = () => {
-    drawerVisiable.value = false;
+    drawerVisible.value = false;
 };
 
 defineExpose({

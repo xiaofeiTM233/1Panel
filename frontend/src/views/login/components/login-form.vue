@@ -9,6 +9,7 @@
                             size="default"
                             :placeholder="$t('commons.login.mfaCode')"
                             v-model.trim="mfaLoginForm.code"
+                            @input="mfaLogin(true)"
                         >
                             <template #prefix>
                                 <el-icon class="el-input__icon">
@@ -28,7 +29,7 @@
                             type="primary"
                             size="default"
                             round
-                            @click="mfaLogin()"
+                            @click="mfaLogin(false)"
                         >
                             {{ $t('commons.button.verify') }}
                         </el-button>
@@ -39,8 +40,26 @@
         <div v-else>
             <div class="login-form">
                 <el-form ref="loginFormRef" :model="loginForm" size="default" :rules="loginRules">
-                    <div class="login-title">{{ $t('commons.button.login') }}</div>
-
+                    <div class="login-form-header">
+                        <div class="title">{{ $t('commons.button.login') }}</div>
+                        <div>
+                            <el-dropdown @command="handleCommand">
+                                <span>
+                                    {{ dropdownText }}
+                                    <el-icon>
+                                        <arrow-down />
+                                    </el-icon>
+                                </span>
+                                <template #dropdown>
+                                    <el-dropdown-menu>
+                                        <el-dropdown-item command="zh">中文(简体)</el-dropdown-item>
+                                        <el-dropdown-item command="tw">中文(繁體)</el-dropdown-item>
+                                        <el-dropdown-item command="en">English</el-dropdown-item>
+                                    </el-dropdown-menu>
+                                </template>
+                            </el-dropdown>
+                        </div>
+                    </div>
                     <el-form-item prop="name" class="no-border">
                         <el-input
                             v-model.trim="loginForm.name"
@@ -130,17 +149,19 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue';
+import { ref, reactive, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import type { ElForm } from 'element-plus';
-import { loginApi, getCaptcha, mfaLoginApi, checkIsDemo } from '@/api/modules/auth';
+import { loginApi, getCaptcha, mfaLoginApi, checkIsDemo, getLanguage } from '@/api/modules/auth';
 import { GlobalStore } from '@/store';
 import { MenuStore } from '@/store/modules/menu';
 import i18n from '@/lang';
 import { MsgSuccess } from '@/utils/message';
+import { useI18n } from 'vue-i18n';
 
 const globalStore = GlobalStore();
 const menuStore = MenuStore();
+const usei18n = useI18n();
 
 const errAuthInfo = ref(false);
 const errCaptcha = ref(false);
@@ -158,21 +179,24 @@ const loginForm = reactive({
     ignoreCaptcha: true,
     captcha: '',
     captchaID: '',
-    authMethod: '',
+    authMethod: 'session',
     agreeLicense: false,
-});
-const loginRules = reactive({
-    name: [{ required: true, message: i18n.global.t('commons.rule.username'), trigger: 'blur' }],
-    password: [{ required: true, message: i18n.global.t('commons.rule.password'), trigger: 'blur' }],
+    language: 'zh',
 });
 
+const loginRules = reactive({
+    name: computed(() => [{ required: true, message: i18n.global.t('commons.rule.username'), trigger: 'blur' }]),
+    password: computed(() => [{ required: true, message: i18n.global.t('commons.rule.password'), trigger: 'blur' }]),
+});
+
+let isLoggingIn = false;
 const mfaButtonFocused = ref();
 const mfaLoginForm = reactive({
     name: '',
     password: '',
     secret: '',
     code: '',
-    authMethod: '',
+    authMethod: 'session',
 });
 
 const captcha = reactive({
@@ -183,11 +207,24 @@ const captcha = reactive({
 
 const loading = ref<boolean>(false);
 const mfaShow = ref<boolean>(false);
-
 const router = useRouter();
+const dropdownText = ref('中文(简体)');
+
+function handleCommand(command: string) {
+    loginForm.language = command;
+    usei18n.locale.value = command;
+    globalStore.updateLanguage(command);
+    if (command === 'zh') {
+        dropdownText.value = '中文(简体)';
+    } else if (command === 'en') {
+        dropdownText.value = 'English';
+    } else if (command === 'tw') {
+        dropdownText.value = '中文(繁體)';
+    }
+}
 
 const login = (formEl: FormInstance | undefined) => {
-    if (!formEl) return;
+    if (!formEl || isLoggingIn) return;
     formEl.validate(async (valid) => {
         if (!valid) return;
         let requestLoginForm = {
@@ -196,7 +233,8 @@ const login = (formEl: FormInstance | undefined) => {
             ignoreCaptcha: globalStore.ignoreCaptcha,
             captcha: loginForm.captcha,
             captchaID: captcha.captchaID,
-            authMethod: '',
+            authMethod: 'session',
+            language: loginForm.language,
         };
         if (!globalStore.ignoreCaptcha && requestLoginForm.captcha == '') {
             errCaptcha.value = true;
@@ -207,6 +245,7 @@ const login = (formEl: FormInstance | undefined) => {
             return;
         }
         try {
+            isLoggingIn = true;
             loading.value = true;
             const res = await loginApi(requestLoginForm);
             if (res.code === 406) {
@@ -237,18 +276,22 @@ const login = (formEl: FormInstance | undefined) => {
         } catch (error) {
             loginVerify();
         } finally {
+            isLoggingIn = false;
             loading.value = false;
         }
     });
 };
 
-const mfaLogin = async () => {
-    if (mfaLoginForm.code) {
+const mfaLogin = async (auto: boolean) => {
+    if (isLoggingIn) return;
+    if ((!auto && mfaLoginForm.code) || (auto && mfaLoginForm.code.length === 6)) {
+        isLoggingIn = true;
         mfaLoginForm.name = loginForm.name;
         mfaLoginForm.password = loginForm.password;
         const res = await mfaLoginApi(mfaLoginForm);
         if (res.code === 406) {
             errMfaInfo.value = true;
+            isLoggingIn = false;
             return;
         }
         globalStore.setLogStatus(true);
@@ -269,8 +312,18 @@ const checkIsSystemDemo = async () => {
     isDemo.value = res.data;
 };
 
+const loadLanguage = async () => {
+    try {
+        const res = await getLanguage();
+        loginForm.language = res.data;
+        handleCommand(res.data);
+    } catch (error) {}
+};
+
 onMounted(() => {
+    globalStore.isOnRestart = false;
     loginVerify();
+    loadLanguage();
     document.title = globalStore.themeConfig.panelName;
     loginForm.agreeLicense = globalStore.agreeLicense;
     checkIsSystemDemo();
@@ -283,7 +336,7 @@ onMounted(() => {
                 }
             }
             if (mfaShow.value && !mfaButtonFocused.value) {
-                mfaLogin();
+                mfaLogin(false);
             }
         }
     };
@@ -378,6 +431,24 @@ onMounted(() => {
         text-align: center;
         span {
             color: red;
+        }
+    }
+
+    .login-form-header {
+        display: flex;
+        margin-bottom: 30px;
+        justify-content: space-between;
+        align-items: center;
+        .title {
+            color: #646a73;
+            font-size: 25px;
+        }
+    }
+
+    .l-select {
+        :deep(.el-input__wrapper) {
+            background: none !important;
+            box-shadow: none !important;
         }
     }
 }

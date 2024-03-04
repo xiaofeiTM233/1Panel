@@ -4,9 +4,9 @@ import (
 	"archive/zip"
 	"bufio"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"github.com/1Panel-dev/1Panel/backend/utils/cmd"
 	"io"
 	"io/fs"
 	"net/http"
@@ -17,6 +17,12 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/1Panel-dev/1Panel/backend/utils/cmd"
+	http2 "github.com/1Panel-dev/1Panel/backend/utils/http"
+	cZip "github.com/klauspost/compress/zip"
+	"golang.org/x/text/encoding/simplifiedchinese"
+	"golang.org/x/text/transform"
 
 	"github.com/1Panel-dev/1Panel/backend/global"
 	"github.com/mholt/archiver/v4"
@@ -80,6 +86,14 @@ func (f FileOp) DeleteFile(dst string) error {
 	return f.Fs.Remove(dst)
 }
 
+func (f FileOp) CleanDir(dst string) error {
+	return cmd.ExecCmd(fmt.Sprintf("rm -rf %s/*", dst))
+}
+
+func (f FileOp) RmRf(dst string) error {
+	return cmd.ExecCmd(fmt.Sprintf("rm -rf %s", dst))
+}
+
 func (f FileOp) WriteFile(dst string, in io.Reader, mode fs.FileMode) error {
 	file, err := f.Fs.OpenFile(dst, os.O_RDWR|os.O_CREATE|os.O_TRUNC, mode)
 	if err != nil {
@@ -112,18 +126,10 @@ func (f FileOp) SaveFile(dst string, content string, mode fs.FileMode) error {
 	return nil
 }
 
-func (f FileOp) Chmod(dst string, mode fs.FileMode) error {
-	return f.Fs.Chmod(dst, mode)
-}
-
-func (f FileOp) Chown(dst string, uid int, gid int) error {
-	return f.Fs.Chown(dst, uid, gid)
-}
-
 func (f FileOp) ChownR(dst string, uid string, gid string, sub bool) error {
-	cmdStr := fmt.Sprintf("chown %s:%s %s", uid, gid, dst)
+	cmdStr := fmt.Sprintf(`chown %s:%s "%s"`, uid, gid, dst)
 	if sub {
-		cmdStr = fmt.Sprintf("chown -R %s:%s %s", uid, gid, dst)
+		cmdStr = fmt.Sprintf(`chown -R %s:%s "%s"`, uid, gid, dst)
 	}
 	if cmd.HasNoPasswordSudo() {
 		cmdStr = fmt.Sprintf("sudo %s", cmdStr)
@@ -137,8 +143,11 @@ func (f FileOp) ChownR(dst string, uid string, gid string, sub bool) error {
 	return nil
 }
 
-func (f FileOp) ChmodR(dst string, mode int64) error {
-	cmdStr := fmt.Sprintf("chmod -R %v %s", fmt.Sprintf("%04o", mode), dst)
+func (f FileOp) ChmodR(dst string, mode int64, sub bool) error {
+	cmdStr := fmt.Sprintf(`chmod %v "%s"`, fmt.Sprintf("%04o", mode), dst)
+	if sub {
+		cmdStr = fmt.Sprintf(`chmod -R %v "%s"`, fmt.Sprintf("%04o", mode), dst)
+	}
 	if cmd.HasNoPasswordSudo() {
 		cmdStr = fmt.Sprintf("sudo %s", cmdStr)
 	}
@@ -200,8 +209,13 @@ func (w *WriteCounter) SaveProcess() {
 	}
 }
 
-func (f FileOp) DownloadFileWithProcess(url, dst, key string) error {
+func (f FileOp) DownloadFileWithProcess(url, dst, key string, ignoreCertificate bool) error {
 	client := &http.Client{}
+	if ignoreCertificate {
+		client.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		}
+	}
 	request, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil
@@ -249,11 +263,10 @@ func (f FileOp) DownloadFileWithProcess(url, dst, key string) error {
 }
 
 func (f FileOp) DownloadFile(url, dst string) error {
-	resp, err := http.Get(url)
+	resp, err := http2.GetHttpRes(url)
 	if err != nil {
-		return fmt.Errorf("get download file [%s] error, err %s", dst, err.Error())
+		return err
 	}
-	defer resp.Body.Close()
 
 	out, err := os.Create(dst)
 	if err != nil {
@@ -269,13 +282,35 @@ func (f FileOp) DownloadFile(url, dst string) error {
 	return nil
 }
 
-func (f FileOp) Cut(oldPaths []string, dst string) error {
+func (f FileOp) Cut(oldPaths []string, dst, name string, cover bool) error {
 	for _, p := range oldPaths {
-		base := filepath.Base(p)
-		dstPath := filepath.Join(dst, base)
-		if err := f.Fs.Rename(p, dstPath); err != nil {
+		var dstPath string
+		if name != "" {
+			dstPath = filepath.Join(dst, name)
+			if f.Stat(dstPath) {
+				dstPath = dst
+			}
+		} else {
+			base := filepath.Base(p)
+			dstPath = filepath.Join(dst, base)
+		}
+		coverFlag := ""
+		if cover {
+			coverFlag = "-f"
+		}
+
+		cmdStr := fmt.Sprintf(`mv %s "%s" "%s"`, coverFlag, p, dstPath)
+		if err := cmd.ExecCmd(cmdStr); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func (f FileOp) Mv(oldPath, dstPath string) error {
+	cmdStr := fmt.Sprintf(`mv "%s" "%s"`, oldPath, dstPath)
+	if err := cmd.ExecCmd(cmdStr); err != nil {
+		return err
 	}
 	return nil
 }
@@ -303,89 +338,55 @@ func (f FileOp) Copy(src, dst string) error {
 	return f.CopyFile(src, dst)
 }
 
+func (f FileOp) CopyAndReName(src, dst, name string, cover bool) error {
+	if src = path.Clean("/" + src); src == "" {
+		return os.ErrNotExist
+	}
+	if dst = path.Clean("/" + dst); dst == "" {
+		return os.ErrNotExist
+	}
+	if src == "/" || dst == "/" {
+		return os.ErrInvalid
+	}
+	if dst == src {
+		return os.ErrInvalid
+	}
+
+	srcInfo, err := f.Fs.Stat(src)
+	if err != nil {
+		return err
+	}
+
+	if srcInfo.IsDir() {
+		dstPath := dst
+		if name != "" && !cover {
+			dstPath = filepath.Join(dst, name)
+		}
+		return cmd.ExecCmd(fmt.Sprintf(`cp -rf "%s" "%s"`, src, dstPath))
+	} else {
+		dstPath := filepath.Join(dst, name)
+		if cover {
+			dstPath = dst
+		}
+		return cmd.ExecCmd(fmt.Sprintf(`cp -f "%s" "%s"`, src, dstPath))
+	}
+}
+
 func (f FileOp) CopyDir(src, dst string) error {
 	srcInfo, err := f.Fs.Stat(src)
 	if err != nil {
 		return err
 	}
 	dstDir := filepath.Join(dst, srcInfo.Name())
-	if err := f.Fs.MkdirAll(dstDir, srcInfo.Mode()); err != nil {
+	if err = f.Fs.MkdirAll(dstDir, srcInfo.Mode()); err != nil {
 		return err
 	}
-
-	dir, _ := f.Fs.Open(src)
-	obs, err := dir.Readdir(-1)
-	if err != nil {
-		return err
-	}
-	var errs []error
-
-	for _, obj := range obs {
-		fSrc := filepath.Join(src, obj.Name())
-		if obj.IsDir() {
-			err = f.CopyDir(fSrc, dstDir)
-			if err != nil {
-				errs = append(errs, err)
-			}
-		} else {
-			err = f.CopyFile(fSrc, dstDir)
-			if err != nil {
-				errs = append(errs, err)
-			}
-		}
-	}
-
-	var errString string
-	for _, err := range errs {
-		errString += err.Error() + "\n"
-	}
-
-	if errString != "" {
-		return errors.New(errString)
-	}
-
-	return nil
+	return cmd.ExecCmd(fmt.Sprintf(`cp -rf "%s" "%s"`, src, dst+"/"))
 }
 
 func (f FileOp) CopyFile(src, dst string) error {
-	srcFile, err := f.Fs.Open(src)
-	if err != nil {
-		return err
-	}
-	defer srcFile.Close()
-
-	srcInfo, err := f.Fs.Stat(src)
-	if err != nil {
-		return err
-	}
-	dstPath := path.Join(dst, srcInfo.Name())
-	if src == dstPath {
-		return nil
-	}
-
-	err = f.Fs.MkdirAll(filepath.Dir(dst), 0666)
-	if err != nil {
-		return err
-	}
-
-	dstFile, err := f.Fs.OpenFile(dstPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0775)
-	if err != nil {
-		return err
-	}
-	defer dstFile.Close()
-
-	if _, err = io.Copy(dstFile, srcFile); err != nil {
-		return err
-	}
-	info, err := f.Fs.Stat(src)
-	if err != nil {
-		return err
-	}
-	if err = f.Fs.Chmod(dstFile.Name(), info.Mode()); err != nil {
-		return err
-	}
-
-	return nil
+	dst = filepath.Clean(dst) + string(filepath.Separator)
+	return cmd.ExecCmd(fmt.Sprintf(`cp -f "%s" "%s"`, src, dst+"/"))
 }
 
 func (f FileOp) GetDirSize(path string) (float64, error) {
@@ -405,17 +406,6 @@ func (f FileOp) GetDirSize(path string) (float64, error) {
 	return dirSize, nil
 }
 
-type CompressType string
-
-const (
-	Zip   CompressType = "zip"
-	Gz    CompressType = "gz"
-	Bz2   CompressType = "bz2"
-	Tar   CompressType = "tar"
-	TarGz CompressType = "tar.gz"
-	Xz    CompressType = "xz"
-)
-
 func getFormat(cType CompressType) archiver.CompressedArchive {
 	format := archiver.CompressedArchive{}
 	switch cType {
@@ -424,7 +414,10 @@ func getFormat(cType CompressType) archiver.CompressedArchive {
 	case TarGz, Gz:
 		format.Compression = archiver.Gz{}
 		format.Archival = archiver.Tar{}
-	case Zip:
+	case SdkTarGz:
+		format.Compression = archiver.Gz{}
+		format.Archival = archiver.Tar{}
+	case SdkZip, Zip:
 		format.Archival = archiver.Zip{
 			Compression: zip.Deflate,
 		}
@@ -463,10 +456,11 @@ func (f FileOp) Compress(srcRiles []string, dst string, name string, cType Compr
 
 	switch cType {
 	case Zip:
-		if err := ZipFile(files, out); err != nil {
-			_ = f.DeleteFile(dstFile)
-			return err
+		if err := ZipFile(files, out); err == nil {
+			return nil
 		}
+		_ = f.DeleteFile(dstFile)
+		return NewZipArchiver().Compress(srcRiles, dstFile)
 	default:
 		err = format.Archive(context.Background(), out, files)
 		if err != nil {
@@ -481,20 +475,45 @@ func isIgnoreFile(name string) bool {
 	return strings.HasPrefix(name, "__MACOSX") || strings.HasSuffix(name, ".DS_Store") || strings.HasPrefix(name, "._")
 }
 
-func (f FileOp) Decompress(srcFile string, dst string, cType CompressType) error {
-	format := getFormat(cType)
+func decodeGBK(input string) (string, error) {
+	decoder := simplifiedchinese.GBK.NewDecoder()
+	decoded, _, err := transform.String(decoder, input)
+	if err != nil {
+		return "", err
+	}
+	return decoded, nil
+}
 
+func (f FileOp) decompressWithSDK(srcFile string, dst string, cType CompressType) error {
+	format := getFormat(cType)
 	handler := func(ctx context.Context, archFile archiver.File) error {
 		info := archFile.FileInfo
 		if isIgnoreFile(archFile.Name()) {
 			return nil
 		}
-		filePath := filepath.Join(dst, archFile.NameInArchive)
+		fileName := archFile.NameInArchive
+		var err error
+		if header, ok := archFile.Header.(cZip.FileHeader); ok {
+			if header.NonUTF8 && header.Flags == 0 {
+				fileName, err = decodeGBK(fileName)
+				if err != nil {
+					return err
+				}
+			}
+		}
+		filePath := filepath.Join(dst, fileName)
 		if archFile.FileInfo.IsDir() {
 			if err := f.Fs.MkdirAll(filePath, info.Mode()); err != nil {
 				return err
 			}
 			return nil
+		} else {
+			parentDir := path.Dir(filePath)
+			if !f.Stat(parentDir) {
+				if err := f.Fs.MkdirAll(parentDir, info.Mode()); err != nil {
+					return err
+				}
+			}
 		}
 		fr, err := archFile.Open()
 		if err != nil {
@@ -519,38 +538,18 @@ func (f FileOp) Decompress(srcFile string, dst string, cType CompressType) error
 	return format.Extract(context.Background(), input, nil, handler)
 }
 
-func (f FileOp) Backup(srcFile string) (string, error) {
-	backupPath := srcFile + "_bak"
-	info, _ := f.Fs.Stat(backupPath)
-	if info != nil {
-		if info.IsDir() {
-			_ = f.DeleteDir(backupPath)
-		} else {
-			_ = f.DeleteFile(backupPath)
+func (f FileOp) Decompress(srcFile string, dst string, cType CompressType) error {
+	if err := f.decompressWithSDK(srcFile, dst, cType); err != nil {
+		if cType == Tar || cType == Zip {
+			shellArchiver, err := NewShellArchiver(cType)
+			if err != nil {
+				return err
+			}
+			return shellArchiver.Extract(srcFile, dst)
 		}
+		return err
 	}
-	if err := f.Rename(srcFile, backupPath); err != nil {
-		return backupPath, err
-	}
-
-	return backupPath, nil
-}
-
-func (f FileOp) CopyAndBackup(src string) (string, error) {
-	backupPath := src + "_bak"
-	info, _ := f.Fs.Stat(backupPath)
-	if info != nil {
-		if info.IsDir() {
-			_ = f.DeleteDir(backupPath)
-		} else {
-			_ = f.DeleteFile(backupPath)
-		}
-	}
-	_ = f.CreateDir(backupPath, 0755)
-	if err := f.Copy(src, backupPath); err != nil {
-		return backupPath, err
-	}
-	return backupPath, nil
+	return nil
 }
 
 func ZipFile(files []archiver.File, dst afero.File) error {
@@ -562,12 +561,12 @@ func ZipFile(files []archiver.File, dst afero.File) error {
 		if err != nil {
 			return err
 		}
+		hdr.Method = zip.Deflate
 		hdr.Name = file.NameInArchive
 		if file.IsDir() {
 			if !strings.HasSuffix(hdr.Name, "/") {
 				hdr.Name += "/"
 			}
-			hdr.Method = zip.Store
 		}
 		w, err := zw.CreateHeader(hdr)
 		if err != nil {

@@ -1,8 +1,10 @@
 package response
 
 import (
-	"github.com/1Panel-dev/1Panel/backend/app/dto/request"
 	"time"
+
+	"github.com/1Panel-dev/1Panel/backend/app/dto"
+	"github.com/1Panel-dev/1Panel/backend/app/dto/request"
 
 	"github.com/1Panel-dev/1Panel/backend/app/model"
 )
@@ -13,8 +15,10 @@ type AppRes struct {
 }
 
 type AppUpdateRes struct {
-	CanUpdate            bool `json:"canUpdate"`
-	AppStoreLastModified int  `json:"appStoreLastModified"`
+	CanUpdate            bool         `json:"canUpdate"`
+	IsSyncing            bool         `json:"isSyncing"`
+	AppStoreLastModified int          `json:"appStoreLastModified"`
+	AppList              *dto.AppList `json:"appList"`
 }
 
 type AppDTO struct {
@@ -39,13 +43,23 @@ type AppInstalledCheck struct {
 	AppInstallID  uint      `json:"appInstallId"`
 	ContainerName string    `json:"containerName"`
 	InstallPath   string    `json:"installPath"`
+	HttpPort      int       `json:"httpPort"`
+	HttpsPort     int       `json:"httpsPort"`
 }
 
 type AppDetailDTO struct {
 	model.AppDetail
-	Enable bool        `json:"enable"`
-	Params interface{} `json:"params"`
-	Image  string      `json:"image"`
+	Enable   bool        `json:"enable"`
+	Params   interface{} `json:"params"`
+	Image    string      `json:"image"`
+	HostMode bool        `json:"hostMode"`
+}
+
+type IgnoredApp struct {
+	Icon     string `json:"icon"`
+	Name     string `json:"name"`
+	Version  string `json:"version"`
+	DetailID uint   `json:"detailID"`
 }
 
 type AppInstalledDTO struct {
@@ -59,15 +73,18 @@ type AppInstalledDTO struct {
 }
 
 type DatabaseConn struct {
-	Password    string `json:"password"`
-	ServiceName string `json:"serviceName"`
-	Port        int64  `json:"port"`
+	Username      string `json:"username"`
+	Password      string `json:"password"`
+	ContainerName string `json:"containerName"`
+	ServiceName   string `json:"serviceName"`
+	Port          int64  `json:"port"`
 }
 
 type AppService struct {
 	Label  string      `json:"label"`
 	Value  string      `json:"value"`
 	Config interface{} `json:"config"`
+	From   string      `json:"from"`
 }
 
 type AppParam struct {

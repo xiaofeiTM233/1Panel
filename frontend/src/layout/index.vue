@@ -1,5 +1,5 @@
 <template>
-    <div :class="classObj" class="app-wrapper" v-loading="loading" :element-loading-text="loadinText" fullscreen>
+    <div :class="classObj" class="app-wrapper" v-loading="loading" :element-loading-text="loadingText" fullscreen>
         <div v-if="classObj.mobile && classObj.openSidebar" class="drawer-bg" @click="handleClickOutside" />
         <div class="app-sidebar" v-if="!globalStore.isFullScreen">
             <Sidebar />
@@ -31,7 +31,7 @@ const globalStore = GlobalStore();
 
 const i18n = useI18n();
 const loading = ref(false);
-const loadinText = ref();
+const loadingText = ref();
 const themeConfig = computed(() => globalStore.themeConfig);
 const { switchDark } = useTheme();
 
@@ -39,6 +39,7 @@ let timer: NodeJS.Timer | null = null;
 
 const classObj = computed(() => {
     return {
+        fullScreen: globalStore.isFullScreen,
         hideSidebar: menuStore.isCollapse,
         openSidebar: !menuStore.isCollapse,
         mobile: globalStore.device === DeviceType.Mobile,
@@ -65,15 +66,25 @@ const loadDataFromDB = async () => {
     document.title = res.data.panelName;
     i18n.locale.value = res.data.language;
     i18n.warnHtmlMessage = false;
+    globalStore.entrance = res.data.securityEntrance;
     globalStore.updateLanguage(res.data.language);
     globalStore.setThemeConfig({ ...themeConfig.value, theme: res.data.theme });
     globalStore.setThemeConfig({ ...themeConfig.value, panelName: res.data.panelName });
     switchDark();
 };
 
+const updateDarkMode = async (event: MediaQueryListEvent) => {
+    const res = await getSettingInfo();
+    if (res.data.theme !== 'auto') {
+        return;
+    }
+    globalStore.setThemeConfig({ ...themeConfig.value, theme: event.matches ? 'dark' : 'light' });
+    switchDark();
+};
+
 const loadStatus = async () => {
     loading.value = globalStore.isLoading;
-    loadinText.value = globalStore.loadingText;
+    loadingText.value = globalStore.loadingText;
     if (loading.value) {
         timer = setInterval(async () => {
             await getSystemAvailable()
@@ -99,6 +110,17 @@ onBeforeUnmount(() => {
 onMounted(() => {
     loadStatus();
     loadDataFromDB();
+
+    const mqList = window.matchMedia('(prefers-color-scheme: dark)');
+    if (mqList.addEventListener) {
+        mqList.addEventListener('change', (e) => {
+            updateDarkMode(e);
+        });
+    } else if (mqList.addListener) {
+        mqList.addListener((e) => {
+            updateDarkMode(e);
+        });
+    }
 });
 </script>
 
@@ -121,12 +143,9 @@ onMounted(() => {
 .main-container {
     display: flex;
     flex-direction: column;
-    flex: 1;
-    flex-basis: auto;
     position: relative;
-    min-height: 100%;
-    height: calc(100vh);
-    transition: margin-left 0.28s;
+    height: 100vh;
+    transition: margin-left 0.3s;
     margin-left: var(--panel-menu-width);
     background-color: #f4f4f4;
     overflow-x: hidden;
@@ -134,19 +153,16 @@ onMounted(() => {
 .app-main {
     padding: 20px;
     flex: 1;
-    flex-basis: auto;
     overflow: auto;
 }
 .app-sidebar {
-    transition: width 0.28s;
+    transition: width 0.3s;
     width: var(--panel-menu-width) !important;
-    height: 100%;
     position: fixed;
     font-size: 0px;
     top: 0;
     bottom: 0;
     left: 0;
-    z-index: 1001;
     overflow: hidden;
 }
 
@@ -161,15 +177,22 @@ onMounted(() => {
         width: calc(100% - var(--panel-menu-hide-width));
     }
 }
+
+.fullScreen {
+    .main-container {
+        margin-left: 0px;
+    }
+}
 // for mobile response 适配移动端
 .mobile {
     .main-container {
         margin-left: 0px;
     }
     .app-sidebar {
-        transition: transform 0.28s;
+        transition: transform 0.3s;
         width: var(--panel-menu-width) !important;
         background: #ffffff;
+        z-index: 9999;
     }
     .app-footer {
         display: block;

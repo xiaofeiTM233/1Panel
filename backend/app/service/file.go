@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -29,10 +30,9 @@ type IFileService interface {
 	Create(op request.FileCreate) error
 	Delete(op request.FileDelete) error
 	BatchDelete(op request.FileBatchDelete) error
-	ChangeMode(op request.FileCreate) error
 	Compress(c request.FileCompress) error
 	DeCompress(c request.FileDeCompress) error
-	GetContent(op request.FileOption) (response.FileInfo, error)
+	GetContent(op request.FileContentReq) (response.FileInfo, error)
 	SaveContent(edit request.FileEdit) error
 	FileDownload(d request.FileDownload) (string, error)
 	DirSize(req request.DirSizeReq) (response.DirSizeRes, error)
@@ -40,6 +40,9 @@ type IFileService interface {
 	Wget(w request.FileWget) (string, error)
 	MvFile(m request.FileMove) error
 	ChangeOwner(req request.FileRoleUpdate) error
+	ChangeMode(op request.FileCreate) error
+	BatchChangeModeAndOwner(op request.FileRoleReq) error
+	ReadLogByLine(req request.FileReadByLineReq) (*response.FileLineContent, error)
 }
 
 func NewIFileService() IFileService {
@@ -133,11 +136,21 @@ func (f *FileService) Create(op request.FileCreate) error {
 
 func (f *FileService) Delete(op request.FileDelete) error {
 	fo := files.NewFileOp()
-	if op.IsDir {
-		return fo.DeleteDir(op.Path)
-	} else {
-		return fo.DeleteFile(op.Path)
+	recycleBinStatus, _ := settingRepo.Get(settingRepo.WithByKey("FileRecycleBin"))
+	if recycleBinStatus.Value == "disable" {
+		op.ForceDelete = true
 	}
+	if op.ForceDelete {
+		if op.IsDir {
+			return fo.DeleteDir(op.Path)
+		} else {
+			return fo.DeleteFile(op.Path)
+		}
+	}
+	if err := NewIRecycleBinService().Create(request.RecycleBinCreate{SourcePath: op.Path}); err != nil {
+		return err
+	}
+	return favoriteRepo.Delete(favoriteRepo.WithByPath(op.Path))
 }
 
 func (f *FileService) BatchDelete(op request.FileBatchDelete) error {
@@ -160,11 +173,24 @@ func (f *FileService) BatchDelete(op request.FileBatchDelete) error {
 
 func (f *FileService) ChangeMode(op request.FileCreate) error {
 	fo := files.NewFileOp()
-	if op.Sub {
-		return fo.ChmodR(op.Path, op.Mode)
-	} else {
-		return fo.Chmod(op.Path, fs.FileMode(op.Mode))
+	return fo.ChmodR(op.Path, op.Mode, op.Sub)
+}
+
+func (f *FileService) BatchChangeModeAndOwner(op request.FileRoleReq) error {
+	fo := files.NewFileOp()
+	for _, path := range op.Paths {
+		if !fo.Stat(path) {
+			return buserr.New(constant.ErrPathNotFound)
+		}
+		if err := fo.ChownR(path, op.User, op.Group, op.Sub); err != nil {
+			return err
+		}
+		if err := fo.ChmodR(path, op.Mode, op.Sub); err != nil {
+			return err
+		}
 	}
+	return nil
+
 }
 
 func (f *FileService) ChangeOwner(req request.FileRoleUpdate) error {
@@ -185,8 +211,11 @@ func (f *FileService) DeCompress(c request.FileDeCompress) error {
 	return fo.Decompress(c.Path, c.Dst, files.CompressType(c.Type))
 }
 
-func (f *FileService) GetContent(op request.FileOption) (response.FileInfo, error) {
-	info, err := files.NewFileInfo(op.FileOption)
+func (f *FileService) GetContent(op request.FileContentReq) (response.FileInfo, error) {
+	info, err := files.NewFileInfo(files.FileOption{
+		Path:   op.Path,
+		Expand: true,
+	})
 	if err != nil {
 		return response.FileInfo{}, err
 	}
@@ -214,7 +243,7 @@ func (f *FileService) ChangeName(req request.FileRename) error {
 func (f *FileService) Wget(w request.FileWget) (string, error) {
 	fo := files.NewFileOp()
 	key := "file-wget-" + common.GetUuid()
-	return key, fo.DownloadFileWithProcess(w.Url, filepath.Join(w.Path, w.Name), key)
+	return key, fo.DownloadFileWithProcess(w.Url, filepath.Join(w.Path, w.Name), key, w.IgnoreCertificate)
 }
 
 func (f *FileService) MvFile(m request.FileMove) error {
@@ -222,18 +251,21 @@ func (f *FileService) MvFile(m request.FileMove) error {
 	if !fo.Stat(m.NewPath) {
 		return buserr.New(constant.ErrPathNotFound)
 	}
-	for _, path := range m.OldPaths {
-		if path == m.NewPath || strings.Contains(m.NewPath, path) {
+	for _, oldPath := range m.OldPaths {
+		if !fo.Stat(oldPath) {
+			return buserr.WithName(constant.ErrFileNotFound, oldPath)
+		}
+		if oldPath == m.NewPath || strings.Contains(m.NewPath, filepath.Clean(oldPath)+"/") {
 			return buserr.New(constant.ErrMovePathFailed)
 		}
 	}
 	if m.Type == "cut" {
-		return fo.Cut(m.OldPaths, m.NewPath)
+		return fo.Cut(m.OldPaths, m.NewPath, m.Name, m.Cover)
 	}
 	var errs []error
 	if m.Type == "copy" {
 		for _, src := range m.OldPaths {
-			if err := fo.Copy(src, m.NewPath); err != nil {
+			if err := fo.CopyAndReName(src, m.NewPath, m.Name, m.Cover); err != nil {
 				errs = append(errs, err)
 				global.LOG.Errorf("copy file [%s] to [%s] failed, err: %s", src, m.NewPath, err.Error())
 			}
@@ -273,4 +305,63 @@ func (f *FileService) DirSize(req request.DirSizeReq) (response.DirSizeRes, erro
 		return response.DirSizeRes{}, err
 	}
 	return response.DirSizeRes{Size: size}, nil
+}
+
+func (f *FileService) ReadLogByLine(req request.FileReadByLineReq) (*response.FileLineContent, error) {
+	logFilePath := ""
+	switch req.Type {
+	case constant.TypeWebsite:
+		website, err := websiteRepo.GetFirst(commonRepo.WithByID(req.ID))
+		if err != nil {
+			return nil, err
+		}
+		nginx, err := getNginxFull(&website)
+		if err != nil {
+			return nil, err
+		}
+		sitePath := path.Join(nginx.SiteDir, "sites", website.Alias)
+		logFilePath = path.Join(sitePath, "log", req.Name)
+	case constant.TypePhp:
+		php, err := runtimeRepo.GetFirst(commonRepo.WithByID(req.ID))
+		if err != nil {
+			return nil, err
+		}
+		logFilePath = php.GetLogPath()
+	case constant.TypeSSL:
+		ssl, err := websiteSSLRepo.GetFirst(commonRepo.WithByID(req.ID))
+		if err != nil {
+			return nil, err
+		}
+		logFilePath = ssl.GetLogPath()
+	case constant.TypeSystem:
+		fileName := ""
+		if len(req.Name) == 0 || req.Name == time.Now().Format("2006-01-02") {
+			fileName = "1Panel.log"
+		} else {
+			fileName = "1Panel-" + req.Name + ".log"
+		}
+		logFilePath = path.Join(global.CONF.System.DataDir, "log", fileName)
+		if _, err := os.Stat(logFilePath); err != nil {
+			fileGzPath := path.Join(global.CONF.System.DataDir, "log", fileName+".gz")
+			if _, err := os.Stat(fileGzPath); err != nil {
+				return nil, buserr.New("ErrHttpReqNotFound")
+			}
+			if err := handleGunzip(fileGzPath); err != nil {
+				return nil, fmt.Errorf("handle ungzip file %s failed, err: %v", fileGzPath, err)
+			}
+		}
+	case "image-pull", "image-push", "image-build", "compose-create":
+		logFilePath = path.Join(global.CONF.System.TmpDir, fmt.Sprintf("docker_logs/%s", req.Name))
+	}
+
+	lines, isEndOfFile, err := files.ReadFileByLine(logFilePath, req.Page, req.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	res := &response.FileLineContent{
+		Content: strings.Join(lines, "\n"),
+		End:     isEndOfFile,
+		Path:    logFilePath,
+	}
+	return res, nil
 }

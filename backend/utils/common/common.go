@@ -12,35 +12,67 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+
+	"golang.org/x/net/idna"
+
+	"github.com/1Panel-dev/1Panel/backend/utils/cmd"
 )
 
-func CompareVersion(version1 string, version2 string) bool {
-	if version1 == version2 {
-		return false
-	}
-	version1s := strings.Split(version1, ".")
-	version2s := strings.Split(version2, ".")
+func CompareVersion(version1, version2 string) bool {
+	v1s := extractNumbers(version1)
+	v2s := extractNumbers(version2)
 
-	n := min(len(version1s), len(version2s))
-	re := regexp.MustCompile("[0-9]+")
-	for i := 0; i < n; i++ {
-		sVersion1s := re.FindAllString(version1s[i], -1)
-		sVersion2s := re.FindAllString(version2s[i], -1)
-		if len(sVersion1s) == 0 {
-			return false
+	maxLen := max(len(v1s), len(v2s))
+	v1s = append(v1s, make([]string, maxLen-len(v1s))...)
+	v2s = append(v2s, make([]string, maxLen-len(v2s))...)
+
+	for i := 0; i < maxLen; i++ {
+		v1, err1 := strconv.Atoi(v1s[i])
+		v2, err2 := strconv.Atoi(v2s[i])
+		if err1 != nil {
+			v1 = 0
 		}
-		if len(sVersion2s) == 0 {
-			return false
+		if err2 != nil {
+			v2 = 0
 		}
-		v1num, _ := strconv.Atoi(sVersion1s[0])
-		v2num, _ := strconv.Atoi(sVersion2s[0])
-		if v1num == v2num {
-			continue
-		} else {
-			return v1num > v2num
+		if v1 != v2 {
+			return v1 > v2
 		}
 	}
-	return true
+	return false
+}
+
+func extractNumbers(version string) []string {
+	var numbers []string
+	start := -1
+	for i, r := range version {
+		if isDigit(r) {
+			if start == -1 {
+				start = i
+			}
+		} else {
+			if start != -1 {
+				numbers = append(numbers, version[start:i])
+				start = -1
+			}
+		}
+	}
+	if start != -1 {
+		numbers = append(numbers, version[start:])
+	}
+	return numbers
+}
+
+func isDigit(r rune) bool {
+	return r >= '0' && r <= '9'
+}
+
+func max(x, y int) int {
+	if x > y {
+		return x
+	}
+	return y
 }
 
 func GetSortedVersions(versions []string) []string {
@@ -56,13 +88,6 @@ func IsCrossVersion(version1, version2 string) bool {
 	v1num, _ := strconv.Atoi(version1s[0])
 	v2num, _ := strconv.Atoi(version2s[0])
 	return v2num > v1num
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
 
 func GetUuid() string {
@@ -84,11 +109,12 @@ func RandStr(n int) string {
 }
 
 func RandStrAndNum(n int) string {
-	mathRand.Seed(time.Now().UnixNano())
+	source := mathRand.NewSource(time.Now().UnixNano())
+	randGen := mathRand.New(source)
 	const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
-	b := make([]byte, 10)
+	b := make([]byte, n)
 	for i := range b {
-		b[i] = charset[mathRand.Int63()%int64(len(charset))]
+		b[i] = charset[randGen.Intn(len(charset)-1)]
 	}
 	return (string(b))
 }
@@ -111,13 +137,11 @@ func ScanUDPPort(port int) bool {
 	return false
 }
 
-func ExistWithStrArray(str string, arr []string) bool {
-	for _, a := range arr {
-		if strings.Contains(a, str) {
-			return true
-		}
+func ScanPortWithProto(port int, proto string) bool {
+	if proto == "udp" {
+		return ScanUDPPort(port)
 	}
-	return false
+	return ScanPort(port)
 }
 
 func IsNum(s string) bool {
@@ -146,10 +170,68 @@ func LoadSizeUnit(value float64) string {
 	return fmt.Sprintf("%v", value)
 }
 
+func LoadSizeUnit2F(value float64) string {
+	if value > 1073741824 {
+		return fmt.Sprintf("%.2fG", value/1073741824)
+	}
+	if value > 1048576 {
+		return fmt.Sprintf("%.2fM", value/1048576)
+	}
+	if value > 1024 {
+		return fmt.Sprintf("%.2fK", value/1024)
+	}
+	return fmt.Sprintf("%.2f", value)
+}
+
 func LoadTimeZone() string {
 	loc := time.Now().Location()
 	if _, err := time.LoadLocation(loc.String()); err != nil {
 		return "Asia/Shanghai"
 	}
 	return loc.String()
+}
+func LoadTimeZoneByCmd() string {
+	loc := time.Now().Location().String()
+	if _, err := time.LoadLocation(loc); err != nil {
+		loc = "Asia/Shanghai"
+	}
+	std, err := cmd.Exec("timedatectl | grep 'Time zone'")
+	if err != nil {
+		return loc
+	}
+	fields := strings.Fields(string(std))
+	if len(fields) != 5 {
+		return loc
+	}
+	if _, err := time.LoadLocation(fields[2]); err != nil {
+		return loc
+	}
+	return fields[2]
+}
+
+func IsValidDomain(domain string) bool {
+	pattern := `^([\w\p{Han}\-\*]{1,100}\.){1,10}([\w\p{Han}\-]{1,24}|[\w\p{Han}\-]{1,24}\.[\w\p{Han}\-]{1,24})(:\d{1,5})?$`
+	match, err := regexp.MatchString(pattern, domain)
+	if err != nil {
+		return false
+	}
+	return match
+}
+
+func ContainsChinese(text string) bool {
+	for _, char := range text {
+		if unicode.Is(unicode.Han, char) {
+			return true
+		}
+	}
+	return false
+}
+
+func PunycodeEncode(text string) (string, error) {
+	encoder := idna.New()
+	ascii, err := encoder.ToASCII(text)
+	if err != nil {
+		return "", err
+	}
+	return ascii, nil
 }

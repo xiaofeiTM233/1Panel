@@ -90,16 +90,16 @@ func OperationLog() gin.HandlerFunc {
 				}
 			}
 		}
-		if len(operationDic.BeforeFuntions) != 0 {
-			for _, funcs := range operationDic.BeforeFuntions {
+		if len(operationDic.BeforeFunctions) != 0 {
+			for _, funcs := range operationDic.BeforeFunctions {
 				for key, value := range formatMap {
 					if funcs.InputValue == key {
 						var names []string
 						if funcs.IsList {
-							sql := fmt.Sprintf("SELECT %s FROM %s where %s in (?);", funcs.OutputColume, funcs.DB, funcs.InputColume)
+							sql := fmt.Sprintf("SELECT %s FROM %s where %s in (?);", funcs.OutputColumn, funcs.DB, funcs.InputColumn)
 							_ = global.DB.Raw(sql, value).Scan(&names)
 						} else {
-							_ = global.DB.Raw(fmt.Sprintf("select %s from %s where %s = ?;", funcs.OutputColume, funcs.DB, funcs.InputColume), value).Scan(&names)
+							_ = global.DB.Raw(fmt.Sprintf("select %s from %s where %s = ?;", funcs.OutputColumn, funcs.DB, funcs.InputColumn), value).Scan(&names)
 						}
 						formatMap[funcs.OutputValue] = strings.Join(names, ",")
 						break
@@ -109,17 +109,17 @@ func OperationLog() gin.HandlerFunc {
 		}
 		for key, value := range formatMap {
 			if strings.Contains(operationDic.FormatEN, "["+key+"]") {
-				if arrys, ok := value.([]string); ok {
-					operationDic.FormatZH = strings.ReplaceAll(operationDic.FormatZH, "["+key+"]", fmt.Sprintf("[%v]", strings.Join(arrys, ",")))
-					operationDic.FormatEN = strings.ReplaceAll(operationDic.FormatEN, "["+key+"]", fmt.Sprintf("[%v]", strings.Join(arrys, ",")))
+				if arrays, ok := value.([]string); ok {
+					operationDic.FormatZH = strings.ReplaceAll(operationDic.FormatZH, "["+key+"]", fmt.Sprintf("[%v]", strings.Join(arrays, ",")))
+					operationDic.FormatEN = strings.ReplaceAll(operationDic.FormatEN, "["+key+"]", fmt.Sprintf("[%v]", strings.Join(arrays, ",")))
 				} else {
 					operationDic.FormatZH = strings.ReplaceAll(operationDic.FormatZH, "["+key+"]", fmt.Sprintf("[%v]", value))
 					operationDic.FormatEN = strings.ReplaceAll(operationDic.FormatEN, "["+key+"]", fmt.Sprintf("[%v]", value))
 				}
 			}
 		}
-		record.DetailEN = operationDic.FormatEN
-		record.DetailZH = operationDic.FormatZH
+		record.DetailEN = strings.ReplaceAll(operationDic.FormatEN, "[]", "")
+		record.DetailZH = strings.ReplaceAll(operationDic.FormatZH, "[]", "")
 
 		writer := responseBodyWriter{
 			ResponseWriter: c.Writer,
@@ -130,21 +130,24 @@ func OperationLog() gin.HandlerFunc {
 
 		c.Next()
 
-		buf := bytes.NewReader(writer.body.Bytes())
-		reader, err := gzip.NewReader(buf)
-		if err != nil {
-			record.Status = constant.StatusFailed
-			record.Message = fmt.Sprintf("gzip new reader failed, err: %v", err)
-			latency := time.Since(now)
-			record.Latency = latency
+		datas := writer.body.Bytes()
+		if c.Request.Header.Get("Content-Encoding") == "gzip" {
+			buf := bytes.NewReader(writer.body.Bytes())
+			reader, err := gzip.NewReader(buf)
+			if err != nil {
+				record.Status = constant.StatusFailed
+				record.Message = fmt.Sprintf("gzip new reader failed, err: %v", err)
+				latency := time.Since(now)
+				record.Latency = latency
 
-			if err := service.NewILogService().CreateOperationLog(record); err != nil {
-				global.LOG.Errorf("create operation record failed, err: %v", err)
+				if err := service.NewILogService().CreateOperationLog(record); err != nil {
+					global.LOG.Errorf("create operation record failed, err: %v", err)
+				}
+				return
 			}
-			return
+			defer reader.Close()
+			datas, _ = io.ReadAll(reader)
 		}
-		defer reader.Close()
-		datas, _ := io.ReadAll(reader)
 		var res response
 		_ = json.Unmarshal(datas, &res)
 		if res.Code == 200 {
@@ -168,20 +171,20 @@ type swaggerJson struct {
 }
 
 type operationJson struct {
-	API            string         `json:"api"`
-	Method         string         `json:"method"`
-	BodyKeys       []string       `json:"bodyKeys"`
-	ParamKeys      []string       `json:"paramKeys"`
-	BeforeFuntions []functionInfo `json:"beforeFuntions"`
-	FormatZH       string         `json:"formatZH"`
-	FormatEN       string         `json:"formatEN"`
+	API             string         `json:"api"`
+	Method          string         `json:"method"`
+	BodyKeys        []string       `json:"bodyKeys"`
+	ParamKeys       []string       `json:"paramKeys"`
+	BeforeFunctions []functionInfo `json:"beforeFunctions"`
+	FormatZH        string         `json:"formatZH"`
+	FormatEN        string         `json:"formatEN"`
 }
 type functionInfo struct {
-	InputColume  string `json:"input_colume"`
+	InputColumn  string `json:"input_column"`
 	InputValue   string `json:"input_value"`
 	IsList       bool   `json:"isList"`
 	DB           string `json:"db"`
-	OutputColume string `json:"output_colume"`
+	OutputColumn string `json:"output_column"`
 	OutputValue  string `json:"output_value"`
 }
 
@@ -205,9 +208,9 @@ func loadLogInfo(path string) string {
 	if !strings.Contains(path, "/") {
 		return ""
 	}
-	pathArrys := strings.Split(path, "/")
-	if len(pathArrys) < 2 {
+	pathArrays := strings.Split(path, "/")
+	if len(pathArrays) < 2 {
 		return ""
 	}
-	return pathArrys[1]
+	return pathArrays[1]
 }

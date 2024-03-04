@@ -5,7 +5,9 @@ export namespace Setting {
         userName: string;
         password: string;
         email: string;
+        systemIP: string;
         systemVersion: string;
+        dockerSockPath: string;
 
         sessionTimeout: number;
         localTime: string;
@@ -15,8 +17,14 @@ export namespace Setting {
         panelName: string;
         theme: string;
         language: string;
+        defaultNetwork: string;
+        lastCleanTime: string;
+        lastCleanSize: string;
+        lastCleanData: string;
 
         serverPort: number;
+        ipv6: string;
+        bindAddress: string;
         ssl: string;
         sslType: string;
         allowIPs: string;
@@ -27,6 +35,7 @@ export namespace Setting {
         complexityVerification: string;
         mfaStatus: string;
         mfaSecret: string;
+        mfaInterval: string;
 
         monitorStatus: string;
         monitorInterval: number;
@@ -64,6 +73,10 @@ export namespace Setting {
     export interface PortUpdate {
         serverPort: number;
     }
+    export interface MFARequest {
+        title: string;
+        interval: number;
+    }
     export interface MFAInfo {
         secret: string;
         qrImage: string;
@@ -71,9 +84,14 @@ export namespace Setting {
     export interface MFABind {
         secret: string;
         code: string;
+        interval: string;
     }
+
     export interface SnapshotCreate {
+        id: number;
         from: string;
+        fromAccounts: Array<string>;
+        defaultDownload: string;
         description: string;
     }
     export interface SnapshotImport {
@@ -90,6 +108,7 @@ export namespace Setting {
         id: number;
         name: string;
         from: string;
+        defaultDownload: string;
         description: string;
         status: string;
         message: string;
@@ -102,6 +121,18 @@ export namespace Setting {
         rollbackStatus: string;
         rollbackMessage: string;
         lastRollbackedAt: string;
+    }
+    export interface SnapshotStatus {
+        panel: string;
+        panelInfo: string;
+        daemonJson: string;
+        appData: string;
+        panelData: string;
+        backupData: string;
+
+        compress: string;
+        size: string;
+        upload: string;
     }
     export interface UpgradeInfo {
         newVersion: string;

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path"
 	"strings"
@@ -18,7 +19,9 @@ import (
 type DockerService struct{}
 
 type IDockerService interface {
-	UpdateConf(req dto.DaemonJsonConf) error
+	UpdateConf(req dto.SettingUpdate) error
+	UpdateLogOption(req dto.LogOption) error
+	UpdateIpv6Option(req dto.Ipv6Option) error
 	UpdateConfByFile(info dto.DaemonJsonUpdateByFile) error
 	LoadDockerStatus() string
 	LoadDockerConf() *dto.DaemonJsonConf
@@ -30,13 +33,17 @@ func NewIDockerService() IDockerService {
 }
 
 type daemonJsonItem struct {
-	Status      string    `json:"status"`
-	Mirrors     []string  `json:"registry-mirrors"`
-	Registries  []string  `json:"insecure-registries"`
-	LiveRestore bool      `json:"live-restore"`
-	IPTables    bool      `json:"iptables"`
-	ExecOpts    []string  `json:"exec-opts"`
-	LogOption   logOption `json:"log-opts"`
+	Status       string    `json:"status"`
+	Mirrors      []string  `json:"registry-mirrors"`
+	Registries   []string  `json:"insecure-registries"`
+	LiveRestore  bool      `json:"live-restore"`
+	Ipv6         bool      `json:"ipv6"`
+	FixedCidrV6  string    `json:"fixed-cidr-v6"`
+	Ip6Tables    bool      `json:"ip6tables"`
+	Experimental bool      `json:"experimental"`
+	IPTables     bool      `json:"iptables"`
+	ExecOpts     []string  `json:"exec-opts"`
+	LogOption    logOption `json:"log-opts"`
 }
 type logOption struct {
 	LogMaxSize string `json:"max-size"`
@@ -86,18 +93,19 @@ func (u *DockerService) LoadDockerConf() *dto.DaemonJsonConf {
 		return &data
 	}
 	var conf daemonJsonItem
-	deamonMap := make(map[string]interface{})
-	if err := json.Unmarshal(file, &deamonMap); err != nil {
+	daemonMap := make(map[string]interface{})
+	if err := json.Unmarshal(file, &daemonMap); err != nil {
 		return &data
 	}
-	arr, err := json.Marshal(deamonMap)
+	arr, err := json.Marshal(daemonMap)
 	if err != nil {
 		return &data
 	}
 	if err := json.Unmarshal(arr, &conf); err != nil {
+		fmt.Println(err)
 		return &data
 	}
-	if _, ok := deamonMap["iptables"]; !ok {
+	if _, ok := daemonMap["iptables"]; !ok {
 		conf.IPTables = true
 	}
 	data.CgroupDriver = "cgroupfs"
@@ -107,6 +115,10 @@ func (u *DockerService) LoadDockerConf() *dto.DaemonJsonConf {
 			break
 		}
 	}
+	data.Ipv6 = conf.Ipv6
+	data.FixedCidrV6 = conf.FixedCidrV6
+	data.Ip6Tables = conf.Ip6Tables
+	data.Experimental = conf.Experimental
 	data.LogMaxSize = conf.LogOption.LogMaxSize
 	data.LogMaxFile = conf.LogOption.LogMaxFile
 	data.Mirrors = conf.Mirrors
@@ -116,7 +128,7 @@ func (u *DockerService) LoadDockerConf() *dto.DaemonJsonConf {
 	return &data
 }
 
-func (u *DockerService) UpdateConf(req dto.DaemonJsonConf) error {
+func (u *DockerService) UpdateConf(req dto.SettingUpdate) error {
 	if _, err := os.Stat(constant.DaemonJsonPath); err != nil && os.IsNotExist(err) {
 		if err = os.MkdirAll(path.Dir(constant.DaemonJsonPath), os.ModePerm); err != nil {
 			return err
@@ -128,53 +140,147 @@ func (u *DockerService) UpdateConf(req dto.DaemonJsonConf) error {
 	if err != nil {
 		return err
 	}
-	deamonMap := make(map[string]interface{})
-	_ = json.Unmarshal(file, &deamonMap)
+	daemonMap := make(map[string]interface{})
+	_ = json.Unmarshal(file, &daemonMap)
 
-	if len(req.Registries) == 0 {
-		delete(deamonMap, "insecure-registries")
-	} else {
-		deamonMap["insecure-registries"] = req.Registries
-	}
-	if len(req.Mirrors) == 0 {
-		delete(deamonMap, "registry-mirrors")
-	} else {
-		deamonMap["registry-mirrors"] = req.Mirrors
-	}
-
-	changeLogOption(deamonMap, req.LogMaxFile, req.LogMaxSize)
-
-	if !req.LiveRestore {
-		delete(deamonMap, "live-restore")
-	} else {
-		deamonMap["live-restore"] = req.LiveRestore
-	}
-	if req.IPTables {
-		delete(deamonMap, "iptables")
-	} else {
-		deamonMap["iptables"] = false
-	}
-	if opts, ok := deamonMap["exec-opts"]; ok {
-		if optsValue, isArray := opts.([]interface{}); isArray {
-			for i := 0; i < len(optsValue); i++ {
-				if opt, isStr := optsValue[i].(string); isStr {
-					if strings.HasPrefix(opt, "native.cgroupdriver=") {
-						optsValue[i] = "native.cgroupdriver=" + req.CgroupDriver
-						break
+	switch req.Key {
+	case "Registries":
+		req.Value = strings.TrimSuffix(req.Value, ",")
+		if len(req.Value) == 0 {
+			delete(daemonMap, "insecure-registries")
+		} else {
+			daemonMap["insecure-registries"] = strings.Split(req.Value, ",")
+		}
+	case "Mirrors":
+		req.Value = strings.TrimSuffix(req.Value, ",")
+		if len(req.Value) == 0 {
+			delete(daemonMap, "registry-mirrors")
+		} else {
+			daemonMap["registry-mirrors"] = strings.Split(req.Value, ",")
+		}
+	case "Ipv6":
+		if req.Value == "disable" {
+			delete(daemonMap, "ipv6")
+			delete(daemonMap, "fixed-cidr-v6")
+			delete(daemonMap, "ip6tables")
+			delete(daemonMap, "experimental")
+		}
+	case "LogOption":
+		if req.Value == "disable" {
+			delete(daemonMap, "log-opts")
+		}
+	case "LiveRestore":
+		if req.Value == "disable" {
+			delete(daemonMap, "live-restore")
+		} else {
+			daemonMap["live-restore"] = true
+		}
+	case "IPtables":
+		if req.Value == "enable" {
+			delete(daemonMap, "iptables")
+		} else {
+			daemonMap["iptables"] = false
+		}
+	case "Driver":
+		if opts, ok := daemonMap["exec-opts"]; ok {
+			if optsValue, isArray := opts.([]interface{}); isArray {
+				for i := 0; i < len(optsValue); i++ {
+					if opt, isStr := optsValue[i].(string); isStr {
+						if strings.HasPrefix(opt, "native.cgroupdriver=") {
+							optsValue[i] = "native.cgroupdriver=" + req.Value
+							break
+						}
 					}
 				}
 			}
-		}
-	} else {
-		if req.CgroupDriver == "systemd" {
-			deamonMap["exec-opts"] = []string{"native.cgroupdriver=systemd"}
+		} else {
+			if req.Value == "systemd" {
+				daemonMap["exec-opts"] = []string{"native.cgroupdriver=systemd"}
+			}
 		}
 	}
-	if len(deamonMap) == 0 {
+	if len(daemonMap) == 0 {
 		_ = os.Remove(constant.DaemonJsonPath)
 		return nil
 	}
-	newJson, err := json.MarshalIndent(deamonMap, "", "\t")
+	newJson, err := json.MarshalIndent(daemonMap, "", "\t")
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(constant.DaemonJsonPath, newJson, 0640); err != nil {
+		return err
+	}
+
+	stdout, err := cmd.Exec("systemctl restart docker")
+	if err != nil {
+		return errors.New(string(stdout))
+	}
+	return nil
+}
+
+func (u *DockerService) UpdateLogOption(req dto.LogOption) error {
+	if _, err := os.Stat(constant.DaemonJsonPath); err != nil && os.IsNotExist(err) {
+		if err = os.MkdirAll(path.Dir(constant.DaemonJsonPath), os.ModePerm); err != nil {
+			return err
+		}
+		_, _ = os.Create(constant.DaemonJsonPath)
+	}
+
+	file, err := os.ReadFile(constant.DaemonJsonPath)
+	if err != nil {
+		return err
+	}
+	daemonMap := make(map[string]interface{})
+	_ = json.Unmarshal(file, &daemonMap)
+
+	changeLogOption(daemonMap, req.LogMaxFile, req.LogMaxSize)
+	if len(daemonMap) == 0 {
+		_ = os.Remove(constant.DaemonJsonPath)
+		return nil
+	}
+	newJson, err := json.MarshalIndent(daemonMap, "", "\t")
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(constant.DaemonJsonPath, newJson, 0640); err != nil {
+		return err
+	}
+
+	stdout, err := cmd.Exec("systemctl restart docker")
+	if err != nil {
+		return errors.New(string(stdout))
+	}
+	return nil
+}
+
+func (u *DockerService) UpdateIpv6Option(req dto.Ipv6Option) error {
+	if _, err := os.Stat(constant.DaemonJsonPath); err != nil && os.IsNotExist(err) {
+		if err = os.MkdirAll(path.Dir(constant.DaemonJsonPath), os.ModePerm); err != nil {
+			return err
+		}
+		_, _ = os.Create(constant.DaemonJsonPath)
+	}
+
+	file, err := os.ReadFile(constant.DaemonJsonPath)
+	if err != nil {
+		return err
+	}
+	daemonMap := make(map[string]interface{})
+	_ = json.Unmarshal(file, &daemonMap)
+
+	daemonMap["ipv6"] = true
+	daemonMap["fixed-cidr-v6"] = req.FixedCidrV6
+	if req.Ip6Tables {
+		daemonMap["ip6tables"] = req.Ip6Tables
+	}
+	if req.Experimental {
+		daemonMap["experimental"] = req.Experimental
+	}
+	if len(daemonMap) == 0 {
+		_ = os.Remove(constant.DaemonJsonPath)
+		return nil
+	}
+	newJson, err := json.MarshalIndent(daemonMap, "", "\t")
 	if err != nil {
 		return err
 	}
@@ -228,10 +334,10 @@ func (u *DockerService) OperateDocker(req dto.DockerOperation) error {
 	return nil
 }
 
-func changeLogOption(deamonMap map[string]interface{}, logMaxFile, logMaxSize string) {
-	if opts, ok := deamonMap["log-opts"]; ok {
+func changeLogOption(daemonMap map[string]interface{}, logMaxFile, logMaxSize string) {
+	if opts, ok := daemonMap["log-opts"]; ok {
 		if len(logMaxFile) != 0 || len(logMaxSize) != 0 {
-			deamonMap["log-driver"] = "json-file"
+			daemonMap["log-driver"] = "json-file"
 		}
 		optsMap, isMap := opts.(map[string]interface{})
 		if isMap {
@@ -246,7 +352,7 @@ func changeLogOption(deamonMap map[string]interface{}, logMaxFile, logMaxSize st
 				delete(optsMap, "max-size")
 			}
 			if len(optsMap) == 0 {
-				delete(deamonMap, "log-opts")
+				delete(daemonMap, "log-opts")
 			}
 		} else {
 			optsMap := make(map[string]interface{})
@@ -257,12 +363,12 @@ func changeLogOption(deamonMap map[string]interface{}, logMaxFile, logMaxSize st
 				optsMap["max-size"] = logMaxSize
 			}
 			if len(optsMap) != 0 {
-				deamonMap["log-opts"] = optsMap
+				daemonMap["log-opts"] = optsMap
 			}
 		}
 	} else {
 		if len(logMaxFile) != 0 || len(logMaxSize) != 0 {
-			deamonMap["log-driver"] = "json-file"
+			daemonMap["log-driver"] = "json-file"
 		}
 		optsMap := make(map[string]interface{})
 		if len(logMaxFile) != 0 {
@@ -272,7 +378,7 @@ func changeLogOption(deamonMap map[string]interface{}, logMaxFile, logMaxSize st
 			optsMap["max-size"] = logMaxSize
 		}
 		if len(optsMap) != 0 {
-			deamonMap["log-opts"] = optsMap
+			daemonMap["log-opts"] = optsMap
 		}
 	}
 }

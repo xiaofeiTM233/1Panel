@@ -29,12 +29,13 @@
                             <el-form-item :label="$t('setting.theme')" prop="theme">
                                 <el-radio-group @change="onSave('Theme', form.theme)" v-model="form.theme">
                                     <el-radio-button label="light">
-                                        <el-icon><Sunny /></el-icon>
-                                        {{ $t('setting.light') }}
+                                        <span>{{ $t('setting.light') }}</span>
                                     </el-radio-button>
                                     <el-radio-button label="dark">
-                                        <el-icon><Moon /></el-icon>
-                                        {{ $t('setting.dark') }}
+                                        <span>{{ $t('setting.dark') }}</span>
+                                    </el-radio-button>
+                                    <el-radio-button label="auto">
+                                        <span>{{ $t('setting.auto') }}</span>
                                     </el-radio-button>
                                 </el-radio-group>
                             </el-form-item>
@@ -55,7 +56,8 @@
                                     @change="onSave('Language', form.language)"
                                     v-model="form.language"
                                 >
-                                    <el-radio label="zh">中文</el-radio>
+                                    <el-radio label="zh">中文(简体)</el-radio>
+                                    <el-radio label="tw">中文(繁體)</el-radio>
                                     <el-radio label="en">English</el-radio>
                                 </el-radio-group>
                             </el-form-item>
@@ -73,19 +75,27 @@
                                 </span>
                             </el-form-item>
 
-                            <el-form-item :label="$t('setting.timeZone')" prop="timeZone">
-                                <el-input disabled v-model.number="form.timeZone">
+                            <el-form-item :label="$t('setting.defaultNetwork')">
+                                <el-input disabled v-model="form.defaultNetworkVal">
                                     <template #append>
-                                        <el-button @click="onChangeTimeZone" icon="Setting">
+                                        <el-button v-show="!show" @click="onChangeNetwork" icon="Setting">
                                             {{ $t('commons.button.set') }}
                                         </el-button>
                                     </template>
                                 </el-input>
                             </el-form-item>
-                            <el-form-item :label="$t('setting.syncTime')">
-                                <el-input disabled v-model="form.localTime">
+
+                            <el-form-item :label="$t('setting.systemIP')" prop="systemIP">
+                                <el-input disabled v-if="form.systemIP" v-model="form.systemIP">
                                     <template #append>
-                                        <el-button v-show="!show" @click="onChangeNtp" icon="Setting">
+                                        <el-button @click="onChangeSystemIP" icon="Setting">
+                                            {{ $t('commons.button.set') }}
+                                        </el-button>
+                                    </template>
+                                </el-input>
+                                <el-input disabled v-if="!form.systemIP" v-model="unset">
+                                    <template #append>
+                                        <el-button @click="onChangeSystemIP" icon="Setting">
                                             {{ $t('commons.button.set') }}
                                         </el-button>
                                     </template>
@@ -100,9 +110,9 @@
         <Password ref="passwordRef" />
         <UserName ref="userNameRef" />
         <PanelName ref="panelNameRef" @search="search()" />
+        <SystemIP ref="systemIPRef" @search="search()" />
         <Timeout ref="timeoutRef" @search="search()" />
-        <TimeZone ref="timezoneRef" @search="search()" />
-        <Ntp ref="ntpRef" @search="search()" />
+        <Network ref="networkRef" @search="search()" />
     </div>
 </template>
 
@@ -118,8 +128,8 @@ import Password from '@/views/setting/panel/password/index.vue';
 import UserName from '@/views/setting/panel/username/index.vue';
 import Timeout from '@/views/setting/panel/timeout/index.vue';
 import PanelName from '@/views/setting/panel/name/index.vue';
-import TimeZone from '@/views/setting/panel/timezone/index.vue';
-import Ntp from '@/views/setting/panel/ntp/index.vue';
+import SystemIP from '@/views/setting/panel/systemip/index.vue';
+import Network from '@/views/setting/panel/default-network/index.vue';
 
 const loading = ref(false);
 const i18n = useI18n();
@@ -136,9 +146,12 @@ const form = reactive({
     timeZone: '',
     ntpSite: '',
     panelName: '',
+    systemIP: '',
     theme: '',
     language: '',
     complexityVerification: '',
+    defaultNetwork: '',
+    defaultNetworkVal: '',
 });
 
 const show = ref();
@@ -146,9 +159,10 @@ const show = ref();
 const userNameRef = ref();
 const passwordRef = ref();
 const panelNameRef = ref();
+const systemIPRef = ref();
 const timeoutRef = ref();
-const ntpRef = ref();
-const timezoneRef = ref();
+const networkRef = ref();
+const unset = ref(i18n.t('setting.unSetting'));
 
 const search = async () => {
     const res = await getSettingInfo();
@@ -159,9 +173,12 @@ const search = async () => {
     form.timeZone = res.data.timeZone;
     form.ntpSite = res.data.ntpSite;
     form.panelName = res.data.panelName;
+    form.systemIP = res.data.systemIP;
     form.theme = res.data.theme;
     form.language = res.data.language;
     form.complexityVerification = res.data.complexityVerification;
+    form.defaultNetwork = res.data.defaultNetwork;
+    form.defaultNetworkVal = res.data.defaultNetwork === 'all' ? i18n.t('commons.table.all') : res.data.defaultNetwork;
 };
 
 const onChangePassword = () => {
@@ -176,11 +193,11 @@ const onChangeTitle = () => {
 const onChangeTimeout = () => {
     timeoutRef.value.acceptParams({ sessionTimeout: form.sessionTimeout });
 };
-const onChangeTimeZone = () => {
-    timezoneRef.value.acceptParams({ timeZone: form.timeZone });
+const onChangeSystemIP = () => {
+    systemIPRef.value.acceptParams({ systemIP: form.systemIP });
 };
-const onChangeNtp = () => {
-    ntpRef.value.acceptParams({ localTime: form.localTime, ntpSite: form.ntpSite });
+const onChangeNetwork = () => {
+    networkRef.value.acceptParams({ defaultNetwork: form.defaultNetwork });
 };
 
 const onSave = async (key: string, val: any) => {

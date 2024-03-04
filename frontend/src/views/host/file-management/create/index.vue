@@ -21,7 +21,7 @@
                     v-loading="loading"
                     @submit.enter.prevent
                 >
-                    <el-form-item :label="$t('file.name')" prop="name">
+                    <el-form-item :label="$t('commons.table.name')" prop="name">
                         <el-input v-model.trim="addForm.name" />
                     </el-form-item>
                     <el-form-item v-if="!addForm.isDir">
@@ -44,7 +44,7 @@
                         <el-checkbox v-if="addForm.isDir" v-model="setRole" :label="$t('file.setRole')"></el-checkbox>
                     </el-form-item>
                 </el-form>
-                <FileRole v-if="setRole" :mode="'0755'" @get-mode="getMode"></FileRole>
+                <FileRole v-if="setRole" :mode="'0755'" @get-mode="getMode" :key="open.toString()"></FileRole>
             </el-col>
         </el-row>
 

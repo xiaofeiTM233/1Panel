@@ -4,7 +4,6 @@ import (
 	"github.com/1Panel-dev/1Panel/backend/app/api/v1/helper"
 	"github.com/1Panel-dev/1Panel/backend/app/dto"
 	"github.com/1Panel-dev/1Panel/backend/constant"
-	"github.com/1Panel-dev/1Panel/backend/global"
 	"github.com/gin-gonic/gin"
 )
 
@@ -16,17 +15,13 @@ import (
 // @Success 200
 // @Security ApiKeyAuth
 // @Router /containers/template [post]
-// @x-panel-log {"bodyKeys":["name"],"paramKeys":[],"BeforeFuntions":[],"formatZH":"创建 compose 模版 [name]","formatEN":"create compose template [name]"}
+// @x-panel-log {"bodyKeys":["name"],"paramKeys":[],"BeforeFunctions":[],"formatZH":"创建 compose 模版 [name]","formatEN":"create compose template [name]"}
 func (b *BaseApi) CreateComposeTemplate(c *gin.Context) {
 	var req dto.ComposeTemplateCreate
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
 		return
 	}
-	if err := global.VALID.Struct(req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
-		return
-	}
+
 	if err := composeTemplateService.Create(req); err != nil {
 		helper.ErrorWithDetail(c, constant.CodeErrInternalServer, constant.ErrTypeInternalServer, err)
 		return
@@ -45,8 +40,7 @@ func (b *BaseApi) CreateComposeTemplate(c *gin.Context) {
 // @Router /containers/template/search [post]
 func (b *BaseApi) SearchComposeTemplate(c *gin.Context) {
 	var req dto.SearchWithPage
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
 		return
 	}
 
@@ -66,7 +60,7 @@ func (b *BaseApi) SearchComposeTemplate(c *gin.Context) {
 // @Summary List compose templates
 // @Description 获取容器编排模版列表
 // @Produce json
-// @Success 200 {anrry} dto.ComposeTemplateInfo
+// @Success 200 {array} dto.ComposeTemplateInfo
 // @Security ApiKeyAuth
 // @Router /containers/template [get]
 func (b *BaseApi) ListComposeTemplate(c *gin.Context) {
@@ -87,15 +81,10 @@ func (b *BaseApi) ListComposeTemplate(c *gin.Context) {
 // @Success 200
 // @Security ApiKeyAuth
 // @Router /containers/template/del [post]
-// @x-panel-log {"bodyKeys":["ids"],"paramKeys":[],"BeforeFuntions":[{"input_colume":"id","input_value":"ids","isList":true,"db":"compose_templates","output_colume":"name","output_value":"names"}],"formatZH":"删除 compose 模版 [names]","formatEN":"delete compose template [names]"}
+// @x-panel-log {"bodyKeys":["ids"],"paramKeys":[],"BeforeFunctions":[{"input_column":"id","input_value":"ids","isList":true,"db":"compose_templates","output_column":"name","output_value":"names"}],"formatZH":"删除 compose 模版 [names]","formatEN":"delete compose template [names]"}
 func (b *BaseApi) DeleteComposeTemplate(c *gin.Context) {
 	var req dto.BatchDeleteReq
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
-		return
-	}
-	if err := global.VALID.Struct(req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
 		return
 	}
 
@@ -114,15 +103,10 @@ func (b *BaseApi) DeleteComposeTemplate(c *gin.Context) {
 // @Success 200
 // @Security ApiKeyAuth
 // @Router /containers/template/update [post]
-// @x-panel-log {"bodyKeys":["id"],"paramKeys":[],"BeforeFuntions":[{"input_colume":"id","input_value":"id","isList":false,"db":"compose_templates","output_colume":"name","output_value":"name"}],"formatZH":"更新 compose 模版 [name]","formatEN":"update compose template information [name]"}
+// @x-panel-log {"bodyKeys":["id"],"paramKeys":[],"BeforeFunctions":[{"input_column":"id","input_value":"id","isList":false,"db":"compose_templates","output_column":"name","output_value":"name"}],"formatZH":"更新 compose 模版 [name]","formatEN":"update compose template information [name]"}
 func (b *BaseApi) UpdateComposeTemplate(c *gin.Context) {
 	var req dto.ComposeTemplateUpdate
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
-		return
-	}
-	if err := global.VALID.Struct(req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
 		return
 	}
 

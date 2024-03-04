@@ -3,6 +3,7 @@ package files
 import (
 	"bufio"
 	"fmt"
+	"github.com/1Panel-dev/1Panel/backend/app/repo"
 	"github.com/1Panel-dev/1Panel/backend/buserr"
 	"github.com/1Panel-dev/1Panel/backend/constant"
 	"io/fs"
@@ -10,6 +11,8 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -23,6 +26,8 @@ type FileInfo struct {
 	Name       string      `json:"name"`
 	User       string      `json:"user"`
 	Group      string      `json:"group"`
+	Uid        string      `json:"uid"`
+	Gid        string      `json:"gid"`
 	Extension  string      `json:"extension"`
 	Content    string      `json:"content"`
 	Size       int64       `json:"size"`
@@ -38,6 +43,7 @@ type FileInfo struct {
 	FileMode   os.FileMode `json:"-"`
 	Items      []*FileInfo `json:"items"`
 	ItemTotal  int         `json:"itemTotal"`
+	FavoriteID uint        `json:"favoriteID"`
 }
 
 type FileOption struct {
@@ -49,6 +55,8 @@ type FileOption struct {
 	ShowHidden bool   `json:"showHidden"`
 	Page       int    `json:"page"`
 	PageSize   int    `json:"pageSize"`
+	SortBy     string `json:"sortBy"`
+	SortOrder  string `json:"sortOrder"`
 }
 
 type FileSearchInfo struct {
@@ -77,15 +85,23 @@ func NewFileInfo(op FileOption) (*FileInfo, error) {
 		IsHidden:  IsHidden(op.Path),
 		Mode:      fmt.Sprintf("%04o", info.Mode().Perm()),
 		User:      GetUsername(info.Sys().(*syscall.Stat_t).Uid),
+		Uid:       strconv.FormatUint(uint64(info.Sys().(*syscall.Stat_t).Uid), 10),
+		Gid:       strconv.FormatUint(uint64(info.Sys().(*syscall.Stat_t).Gid), 10),
 		Group:     GetGroup(info.Sys().(*syscall.Stat_t).Gid),
 		MimeType:  GetMimeType(op.Path),
 	}
+	favoriteRepo := repo.NewIFavoriteRepo()
+	favorite, _ := favoriteRepo.GetFirst(favoriteRepo.WithByPath(op.Path))
+	if favorite.ID > 0 {
+		file.FavoriteID = favorite.ID
+	}
+
 	if file.IsSymlink {
 		file.LinkPath = GetSymlink(op.Path)
 	}
 	if op.Expand {
 		if file.IsDir {
-			if err := file.listChildren(op.Dir, op.ShowHidden, op.ContainSub, op.Search, op.Page, op.PageSize); err != nil {
+			if err := file.listChildren(op); err != nil {
 				return nil, err
 			}
 			return file, nil
@@ -107,8 +123,10 @@ func (f *FileInfo) search(search string, count int) (files []FileSearchInfo, tot
 	if err = cmd.Start(); err != nil {
 		return
 	}
-	defer cmd.Wait()
-	defer cmd.Process.Kill()
+	defer func() {
+		_ = cmd.Wait()
+		_ = cmd.Process.Kill()
+	}()
 
 	scanner := bufio.NewScanner(output)
 	for scanner.Scan() {
@@ -132,7 +150,42 @@ func (f *FileInfo) search(search string, count int) (files []FileSearchInfo, tot
 	return
 }
 
-func (f *FileInfo) listChildren(dir, showHidden, containSub bool, search string, page, pageSize int) error {
+func sortFileList(list []FileSearchInfo, sortBy, sortOrder string) {
+	switch sortBy {
+	case "name":
+		if sortOrder == "ascending" {
+			sort.Slice(list, func(i, j int) bool {
+				return list[i].Name() < list[j].Name()
+			})
+		} else {
+			sort.Slice(list, func(i, j int) bool {
+				return list[i].Name() > list[j].Name()
+			})
+		}
+	case "size":
+		if sortOrder == "ascending" {
+			sort.Slice(list, func(i, j int) bool {
+				return list[i].Size() < list[j].Size()
+			})
+		} else {
+			sort.Slice(list, func(i, j int) bool {
+				return list[i].Size() > list[j].Size()
+			})
+		}
+	case "modTime":
+		if sortOrder == "ascending" {
+			sort.Slice(list, func(i, j int) bool {
+				return list[i].ModTime().Before(list[j].ModTime())
+			})
+		} else {
+			sort.Slice(list, func(i, j int) bool {
+				return list[i].ModTime().After(list[j].ModTime())
+			})
+		}
+	}
+}
+
+func (f *FileInfo) listChildren(option FileOption) error {
 	afs := &afero.Afero{Fs: f.Fs}
 	var (
 		files []FileSearchInfo
@@ -140,8 +193,8 @@ func (f *FileInfo) listChildren(dir, showHidden, containSub bool, search string,
 		total int
 	)
 
-	if search != "" && containSub {
-		files, total, err = f.search(search, page*pageSize)
+	if option.Search != "" && option.ContainSub {
+		files, total, err = f.search(option.Search, option.Page*option.PageSize)
 		if err != nil {
 			return err
 		}
@@ -150,34 +203,46 @@ func (f *FileInfo) listChildren(dir, showHidden, containSub bool, search string,
 		if err != nil {
 			return err
 		}
+		var (
+			dirs     []FileSearchInfo
+			fileList []FileSearchInfo
+		)
 		for _, file := range dirFiles {
-			files = append(files, FileSearchInfo{
+			info := FileSearchInfo{
 				Path:     f.Path,
 				FileInfo: file,
-			})
+			}
+			if file.IsDir() {
+				dirs = append(dirs, info)
+			} else {
+				fileList = append(fileList, info)
+			}
 		}
+		sortFileList(dirs, option.SortBy, option.SortOrder)
+		sortFileList(fileList, option.SortBy, option.SortOrder)
+		files = append(dirs, fileList...)
 	}
 
 	var items []*FileInfo
 	for _, df := range files {
-		if dir && !df.IsDir() {
+		if option.Dir && !df.IsDir() {
 			continue
 		}
 		name := df.Name()
 		fPath := path.Join(df.Path, df.Name())
-		if search != "" {
-			if containSub {
+		if option.Search != "" {
+			if option.ContainSub {
 				fPath = df.Path
 				name = strings.TrimPrefix(strings.TrimPrefix(fPath, f.Path), "/")
 			} else {
 				lowerName := strings.ToLower(name)
-				lowerSearch := strings.ToLower(search)
+				lowerSearch := strings.ToLower(option.Search)
 				if !strings.Contains(lowerName, lowerSearch) {
 					continue
 				}
 			}
 		}
-		if !showHidden && IsHidden(name) {
+		if !option.ShowHidden && IsHidden(name) {
 			continue
 		}
 		f.ItemTotal++
@@ -206,8 +271,14 @@ func (f *FileInfo) listChildren(dir, showHidden, containSub bool, search string,
 			Mode:      fmt.Sprintf("%04o", df.Mode().Perm()),
 			User:      GetUsername(df.Sys().(*syscall.Stat_t).Uid),
 			Group:     GetGroup(df.Sys().(*syscall.Stat_t).Gid),
+			Uid:       strconv.FormatUint(uint64(df.Sys().(*syscall.Stat_t).Uid), 10),
+			Gid:       strconv.FormatUint(uint64(df.Sys().(*syscall.Stat_t).Gid), 10),
 		}
-
+		favoriteRepo := repo.NewIFavoriteRepo()
+		favorite, _ := favoriteRepo.GetFirst(favoriteRepo.WithByPath(fPath))
+		if favorite.ID > 0 {
+			file.FavoriteID = favorite.ID
+		}
 		if isSymlink {
 			file.LinkPath = GetSymlink(fPath)
 		}
@@ -219,11 +290,11 @@ func (f *FileInfo) listChildren(dir, showHidden, containSub bool, search string,
 		}
 		items = append(items, file)
 	}
-	if containSub {
+	if option.ContainSub {
 		f.ItemTotal = total
 	}
-	start := (page - 1) * pageSize
-	end := pageSize + start
+	start := (option.Page - 1) * option.PageSize
+	end := option.PageSize + start
 	var result []*FileInfo
 	if start < 0 || start > f.ItemTotal || end < 0 || start > end {
 		result = items
@@ -246,7 +317,7 @@ func (f *FileInfo) getContent() error {
 		if err != nil {
 			return nil
 		}
-		if len(cByte) > 0 && detectBinary(cByte) {
+		if len(cByte) > 0 && DetectBinary(cByte) {
 			return buserr.New(constant.ErrFileCanNotRead)
 		}
 		f.Content = string(cByte)
@@ -256,7 +327,7 @@ func (f *FileInfo) getContent() error {
 	}
 }
 
-func detectBinary(buf []byte) bool {
+func DetectBinary(buf []byte) bool {
 	whiteByte := 0
 	n := min(1024, len(buf))
 	for i := 0; i < n; i++ {
@@ -276,3 +347,16 @@ func min(x, y int) int {
 	}
 	return y
 }
+
+type CompressType string
+
+const (
+	Zip      CompressType = "zip"
+	Gz       CompressType = "gz"
+	Bz2      CompressType = "bz2"
+	Tar      CompressType = "tar"
+	TarGz    CompressType = "tar.gz"
+	Xz       CompressType = "xz"
+	SdkZip   CompressType = "sdkZip"
+	SdkTarGz CompressType = "sdkTarGz"
+)

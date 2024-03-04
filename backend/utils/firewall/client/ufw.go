@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/1Panel-dev/1Panel/backend/buserr"
+	"github.com/1Panel-dev/1Panel/backend/constant"
 	"github.com/1Panel-dev/1Panel/backend/utils/cmd"
 )
 
@@ -58,6 +60,16 @@ func (f *Ufw) Stop() error {
 	stdout, err := cmd.Execf("%s disable", f.CmdStr)
 	if err != nil {
 		return fmt.Errorf("stop the firewall failed, err: %s", stdout)
+	}
+	return nil
+}
+
+func (f *Ufw) Restart() error {
+	if err := f.Stop(); err != nil {
+		return err
+	}
+	if err := f.Start(); err != nil {
+		return err
 	}
 	return nil
 }
@@ -129,7 +141,10 @@ func (f *Ufw) Port(port FireInfo, operation string) error {
 	case "drop":
 		port.Strategy = "deny"
 	default:
-		return fmt.Errorf("unsupport strategy %s", port.Strategy)
+		return fmt.Errorf("unsupported strategy %s", port.Strategy)
+	}
+	if cmd.CheckIllegal(port.Protocol, port.Port) {
+		return buserr.New(constant.ErrCmdIllegal)
 	}
 
 	command := fmt.Sprintf("%s %s %s", f.CmdStr, port.Strategy, port.Port)
@@ -141,7 +156,7 @@ func (f *Ufw) Port(port FireInfo, operation string) error {
 	}
 	stdout, err := cmd.Exec(command)
 	if err != nil {
-		return fmt.Errorf("%s port failed, err: %s", operation, stdout)
+		return fmt.Errorf("%s (%s) failed, err: %s", operation, command, stdout)
 	}
 	return nil
 }
@@ -153,10 +168,14 @@ func (f *Ufw) RichRules(rule FireInfo, operation string) error {
 	case "drop":
 		rule.Strategy = "deny"
 	default:
-		return fmt.Errorf("unsupport strategy %s", rule.Strategy)
+		return fmt.Errorf("unsupported strategy %s", rule.Strategy)
 	}
 
-	ruleStr := fmt.Sprintf("%s %s ", f.CmdStr, rule.Strategy)
+	if cmd.CheckIllegal(operation, rule.Protocol, rule.Address, rule.Port) {
+		return buserr.New(constant.ErrCmdIllegal)
+	}
+
+	ruleStr := fmt.Sprintf("%s insert 1 %s ", f.CmdStr, rule.Strategy)
 	if operation == "remove" {
 		ruleStr = fmt.Sprintf("%s delete %s ", f.CmdStr, rule.Strategy)
 	}
@@ -174,7 +193,14 @@ func (f *Ufw) RichRules(rule FireInfo, operation string) error {
 
 	stdout, err := cmd.Exec(ruleStr)
 	if err != nil {
-		return fmt.Errorf("%s rich rules failed, err: %s", operation, stdout)
+		if strings.Contains(stdout, "ERROR: Invalid position") {
+			stdout, err := cmd.Exec(strings.ReplaceAll(ruleStr, "insert 1 ", ""))
+			if err != nil {
+				return fmt.Errorf("%s rich rules (%s), failed, err: %s", operation, ruleStr, stdout)
+			}
+			return nil
+		}
+		return fmt.Errorf("%s rich rules (%s), failed, err: %s", operation, ruleStr, stdout)
 	}
 	return nil
 }
@@ -198,6 +224,9 @@ func (f *Ufw) PortForward(info Forward, operation string) error {
 func (f *Ufw) loadInfo(line string, fireType string) FireInfo {
 	fields := strings.Fields(line)
 	var itemInfo FireInfo
+	if strings.Contains(line, "LIMIT") || strings.Contains(line, "ALLOW FWD") {
+		return itemInfo
+	}
 	if len(fields) < 4 {
 		return itemInfo
 	}

@@ -21,8 +21,11 @@ var (
 	imageService           = service.NewIImageService()
 	dockerService          = service.NewIDockerService()
 
-	mysqlService = service.NewIMysqlService()
-	redisService = service.NewIRedisService()
+	dbCommonService   = service.NewIDBCommonService()
+	mysqlService      = service.NewIMysqlService()
+	postgresqlService = service.NewIPostgresqlService()
+	databaseService   = service.NewIDatabaseService()
+	redisService      = service.NewIRedisService()
 
 	cronjobService = service.NewICronjobService()
 
@@ -31,6 +34,9 @@ var (
 	fileService     = service.NewIFileService()
 	sshService      = service.NewISSHService()
 	firewallService = service.NewIFirewallService()
+
+	deviceService   = service.NewIDeviceService()
+	fail2banService = service.NewIFail2BanService()
 
 	settingService = service.NewISettingService()
 	backupService  = service.NewIBackupService()
@@ -48,5 +54,14 @@ var (
 	snapshotService = service.NewISnapshotService()
 	upgradeService  = service.NewIUpgradeService()
 
-	runtimeService = service.NewRuntimeService()
+	runtimeService       = service.NewRuntimeService()
+	processService       = service.NewIProcessService()
+	phpExtensionsService = service.NewIPHPExtensionsService()
+
+	hostToolService = service.NewIHostToolService()
+
+	recycleBinService = service.NewIRecycleBinService()
+	favoriteService   = service.NewIFavoriteService()
+
+	websiteCAService = service.NewIWebsiteCAService()
 )

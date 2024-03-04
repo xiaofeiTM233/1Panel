@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -20,7 +21,7 @@ type RedisService struct{}
 type IRedisService interface {
 	UpdateConf(req dto.RedisConfUpdate) error
 	UpdatePersistenceConf(req dto.RedisConfPersistenceUpdate) error
-	ChangePassword(info dto.ChangeDBInfo) error
+	ChangePassword(info dto.ChangeRedisPass) error
 
 	LoadStatus() (*dto.RedisStatus, error)
 	LoadConf() (*dto.RedisConf, error)
@@ -43,7 +44,7 @@ func (u *RedisService) UpdateConf(req dto.RedisConfUpdate) error {
 	confs = append(confs, redisConfig{key: "timeout", value: req.Timeout})
 	confs = append(confs, redisConfig{key: "maxclients", value: req.Maxclients})
 	confs = append(confs, redisConfig{key: "maxmemory", value: req.Maxmemory})
-	if err := confSet(redisInfo.Name, confs); err != nil {
+	if err := confSet(redisInfo.Name, "", confs); err != nil {
 		return err
 	}
 	if _, err := compose.Restart(fmt.Sprintf("%s/redis/%s/docker-compose.yml", constant.AppInstallDir, redisInfo.Name)); err != nil {
@@ -53,11 +54,11 @@ func (u *RedisService) UpdateConf(req dto.RedisConfUpdate) error {
 	return nil
 }
 
-func (u *RedisService) ChangePassword(req dto.ChangeDBInfo) error {
-	if err := updateInstallInfoInDB("redis", "", "password", true, req.Value); err != nil {
+func (u *RedisService) ChangePassword(req dto.ChangeRedisPass) error {
+	if err := updateInstallInfoInDB("redis", "", "password", req.Value); err != nil {
 		return err
 	}
-	if err := updateInstallInfoInDB("redis-commander", "", "password", true, req.Value); err != nil {
+	if err := updateInstallInfoInDB("redis-commander", "", "password", req.Value); err != nil {
 		return err
 	}
 
@@ -77,7 +78,7 @@ func (u *RedisService) UpdatePersistenceConf(req dto.RedisConfPersistenceUpdate)
 		confs = append(confs, redisConfig{key: "appendonly", value: req.Appendonly})
 		confs = append(confs, redisConfig{key: "appendfsync", value: req.Appendfsync})
 	}
-	if err := confSet(redisInfo.Name, confs); err != nil {
+	if err := confSet(redisInfo.Name, req.Type, confs); err != nil {
 		return err
 	}
 	if _, err := compose.Restart(fmt.Sprintf("%s/redis/%s/docker-compose.yml", constant.AppInstallDir, redisInfo.Name)); err != nil {
@@ -163,7 +164,7 @@ func (u *RedisService) SearchBackupListWithPage(req dto.PageInfo) (int64, interf
 	if err != nil {
 		return 0, nil, err
 	}
-	backupDir := fmt.Sprintf("%s/database/redis/%s", localDir, redisInfo.Name)
+	backupDir := path.Join(localDir, fmt.Sprintf("database/redis/%s", redisInfo.Name))
 	_ = filepath.Walk(backupDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil
@@ -212,7 +213,7 @@ type redisConfig struct {
 	value string
 }
 
-func confSet(redisName string, changeConf []redisConfig) error {
+func confSet(redisName string, updateType string, changeConf []redisConfig) error {
 	path := fmt.Sprintf("%s/redis/%s/conf/redis.conf", constant.AppInstallDir, redisName)
 	lineBytes, err := os.ReadFile(path)
 	if err != nil {
@@ -220,19 +221,38 @@ func confSet(redisName string, changeConf []redisConfig) error {
 	}
 	files := strings.Split(string(lineBytes), "\n")
 
-	startIndex, endIndex := 0, 0
+	startIndex, endIndex, emptyLine := 0, 0, 0
 	var newFiles []string
 	for i := 0; i < len(files); i++ {
 		if files[i] == "# Redis configuration rewrite by 1Panel" {
 			startIndex = i
+			newFiles = append(newFiles, files[i])
+			continue
 		}
 		if files[i] == "# End Redis configuration rewrite by 1Panel" {
 			endIndex = i
 			break
 		}
+		if startIndex == 0 && strings.HasPrefix(files[i], "save ") {
+			newFiles = append(newFiles, "#   "+files[i])
+			continue
+		}
+		if startIndex != 0 && endIndex == 0 && (len(files[i]) == 0 || (updateType == "rbd" && strings.HasPrefix(files[i], "save "))) {
+			emptyLine++
+			continue
+		}
 		newFiles = append(newFiles, files[i])
 	}
+	endIndex = endIndex - emptyLine
 	for _, item := range changeConf {
+		if item.key == "save" {
+			saveVal := strings.Split(item.value, ",")
+			for i := 0; i < len(saveVal); i++ {
+				newFiles = append(newFiles, "save "+saveVal[i])
+			}
+			continue
+		}
+
 		isExist := false
 		for i := startIndex; i < endIndex; i++ {
 			if strings.HasPrefix(newFiles[i], item.key) || strings.HasPrefix(newFiles[i], "# "+item.key) {

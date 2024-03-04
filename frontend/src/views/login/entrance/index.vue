@@ -1,6 +1,6 @@
 <template>
     <div>
-        <div class="login-backgroud" v-if="isSafety && !isErr">
+        <div class="login-background" v-if="isSafety && !isErr && !isNotFound">
             <div class="login-wrapper">
                 <div :class="screenWidth > 1110 ? 'left inline-block' : ''">
                     <div class="login-title">
@@ -15,14 +15,17 @@
                 </div>
             </div>
         </div>
-        <div v-if="!isSafety && !isErr">
+        <div v-if="!isSafety && !isErr && !isNotFound">
             <UnSafe />
         </div>
-        <div v-if="isErr && mySafetyCode.code === 'err-ip'">
+        <div v-if="isErr && mySafetyCode.code === 'err-ip' && !isNotFound">
             <ErrIP />
         </div>
-        <div v-if="isErr && mySafetyCode.code === 'err-domain'">
+        <div v-if="isErr && mySafetyCode.code === 'err-domain' && !isNotFound">
             <ErrDomain />
+        </div>
+        <div v-if="isNotFound">
+            <ErrFound />
         </div>
     </div>
 </template>
@@ -32,6 +35,7 @@ import { checkIsSafety } from '@/api/modules/auth';
 import LoginForm from '../components/login-form.vue';
 import UnSafe from '@/components/error-message/unsafe.vue';
 import ErrIP from '@/components/error-message/err_ip.vue';
+import ErrFound from '@/components/error-message/404.vue';
 import ErrDomain from '@/components/error-message/err_domain.vue';
 import { ref, onMounted } from 'vue';
 import { GlobalStore } from '@/store';
@@ -40,6 +44,7 @@ const globalStore = GlobalStore();
 const isSafety = ref(true);
 const screenWidth = ref(null);
 const isErr = ref();
+const isNotFound = ref();
 
 const mySafetyCode = defineProps({
     code: {
@@ -50,20 +55,34 @@ const mySafetyCode = defineProps({
 });
 
 const getStatus = async () => {
-    if (mySafetyCode.code === 'err-ip' || mySafetyCode.code === 'err-domain') {
-        isErr.value = true;
+    isErr.value = true;
+    let code = mySafetyCode.code;
+    if (code === 'err-ip' || code === 'err-domain') {
+        code = globalStore.entrance;
     }
-    const res = await checkIsSafety(mySafetyCode.code);
-    if (mySafetyCode.code === 'err-ip' || mySafetyCode.code === 'err-domain') {
-        isErr.value = false;
+    const res = await checkIsSafety(code);
+    isErr.value = false;
+    globalStore.entrance = '';
+    if (res.data === 'disable') {
+        if (code === '') {
+            isNotFound.value = false;
+        } else {
+            isNotFound.value = true;
+        }
+        return;
     }
-    isSafety.value = res.data;
-    if (isSafety.value) {
-        globalStore.entrance = mySafetyCode.code;
+    isNotFound.value = false;
+    if (res.data !== 'pass') {
+        isSafety.value = false;
+        return;
+    }
+    if (res.data === 'pass') {
+        globalStore.entrance = code;
     }
 };
 
 onMounted(() => {
+    globalStore.isOnRestart = false;
     getStatus();
     screenWidth.value = document.body.clientWidth;
     window.onresize = () => {
@@ -81,7 +100,7 @@ onMounted(() => {
     align-items: center;
 }
 
-.login-backgroud {
+.login-background {
     height: 100vh;
     background: url(@/assets/images/1panel-login-bg.png) no-repeat,
         radial-gradient(153.25% 257.2% at 118.99% 181.67%, rgba(50, 132, 255, 0.2) 0%, rgba(82, 120, 255, 0) 100%)
@@ -127,9 +146,9 @@ onMounted(() => {
             font-size: 40px;
             font-family: pingFangSC-Regular;
             font-weight: 600;
-            // @media only screen and (max-width: 1440px) {
-            //     margin-left: 0;
-            // }
+            @media only screen and (max-width: 768px) {
+                font-size: 35px;
+            }
         }
         @media only screen and (max-width: 1110px) {
             margin-bottom: 20px;
@@ -151,6 +170,9 @@ onMounted(() => {
         }
         @media only screen and (max-width: 1110px) {
             margin: 60px auto 0;
+        }
+        @media only screen and (max-width: 768px) {
+            width: 100%;
         }
     }
 }

@@ -1,6 +1,6 @@
 <template>
     <div>
-        <el-drawer v-model="drawerVisiable" :destroy-on-close="true" :close-on-click-modal="false" size="30%">
+        <el-drawer v-model="drawerVisible" :destroy-on-close="true" :close-on-click-modal="false" size="30%">
             <template #header>
                 <DrawerHeader :header="$t('setting.bindDomain')" :back="handleClose" />
             </template>
@@ -23,7 +23,7 @@
             </el-form>
             <template #footer>
                 <span class="dialog-footer">
-                    <el-button @click="drawerVisiable = false">{{ $t('commons.button.cancel') }}</el-button>
+                    <el-button @click="drawerVisible = false">{{ $t('commons.button.cancel') }}</el-button>
                     <el-button :disabled="loading" type="primary" @click="onSavePort(formRef)">
                         {{ $t('commons.button.confirm') }}
                     </el-button>
@@ -38,13 +38,14 @@ import i18n from '@/lang';
 import { MsgSuccess } from '@/utils/message';
 import { updateSetting } from '@/api/modules/setting';
 import { ElMessageBox, FormInstance } from 'element-plus';
+import DrawerHeader from '@/components/drawer-header/index.vue';
 
 const emit = defineEmits<{ (e: 'search'): void }>();
 
 interface DialogProps {
     bindDomain: string;
 }
-const drawerVisiable = ref();
+const drawerVisible = ref();
 const loading = ref();
 
 const form = reactive({
@@ -69,14 +70,18 @@ const formRef = ref<FormInstance>();
 
 const acceptParams = (params: DialogProps): void => {
     form.bindDomain = params.bindDomain;
-    drawerVisiable.value = true;
+    drawerVisible.value = true;
 };
 
 const onSavePort = async (formEl: FormInstance | undefined) => {
     if (!formEl) return;
     formEl.validate(async (valid) => {
         if (!valid) return;
-        ElMessageBox.confirm(i18n.global.t('setting.bindDomainWarnning'), i18n.global.t('setting.bindDomain'), {
+        let title = form.bindDomain ? i18n.global.t('setting.bindDomain') : i18n.global.t('setting.unBindDomain');
+        let helper = form.bindDomain
+            ? i18n.global.t('setting.bindDomainWarning')
+            : i18n.global.t('setting.unBindDomainHelper');
+        ElMessageBox.confirm(helper, title, {
             confirmButtonText: i18n.global.t('commons.button.confirm'),
             cancelButtonText: i18n.global.t('commons.button.cancel'),
             type: 'info',
@@ -86,8 +91,15 @@ const onSavePort = async (formEl: FormInstance | undefined) => {
                 .then(() => {
                     loading.value = false;
                     MsgSuccess(i18n.global.t('commons.msg.operationSuccess'));
-                    emit('search');
-                    handleClose();
+                    if (form.bindDomain) {
+                        let href = window.location.href;
+                        let ipLocal = href.split('//')[1].split(':')[0];
+                        href = href.replaceAll(ipLocal, form.bindDomain);
+                        window.open(href, '_self');
+                    } else {
+                        handleClose();
+                        emit('search');
+                    }
                 })
                 .catch(() => {
                     loading.value = false;
@@ -97,7 +109,7 @@ const onSavePort = async (formEl: FormInstance | undefined) => {
 };
 
 const handleClose = () => {
-    drawerVisiable.value = false;
+    drawerVisible.value = false;
 };
 
 defineExpose({

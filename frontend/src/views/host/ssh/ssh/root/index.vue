@@ -1,7 +1,7 @@
 <template>
     <div>
         <el-drawer
-            v-model="drawerVisiable"
+            v-model="drawerVisible"
             :destroy-on-close="true"
             @close="handleClose"
             :close-on-click-modal="false"
@@ -26,7 +26,7 @@
             </el-form>
             <template #footer>
                 <span class="dialog-footer">
-                    <el-button @click="drawerVisiable = false">{{ $t('commons.button.cancel') }}</el-button>
+                    <el-button @click="drawerVisible = false">{{ $t('commons.button.cancel') }}</el-button>
                     <el-button :disabled="loading" type="primary" @click="onSave(formRef)">
                         {{ $t('commons.button.confirm') }}
                     </el-button>
@@ -41,13 +41,14 @@ import i18n from '@/lang';
 import { MsgSuccess } from '@/utils/message';
 import { ElMessageBox, FormInstance } from 'element-plus';
 import { updateSSH } from '@/api/modules/host';
+import DrawerHeader from '@/components/drawer-header/index.vue';
 
 const emit = defineEmits<{ (e: 'search'): void }>();
 
 interface DialogProps {
     permitRootLogin: string;
 }
-const drawerVisiable = ref();
+const drawerVisible = ref();
 const loading = ref();
 
 const form = reactive({
@@ -58,7 +59,7 @@ const formRef = ref<FormInstance>();
 
 const acceptParams = (params: DialogProps): void => {
     form.permitRootLogin = params.permitRootLogin;
-    drawerVisiable.value = true;
+    drawerVisible.value = true;
 };
 
 const onSave = async (formEl: FormInstance | undefined) => {
@@ -78,8 +79,13 @@ const onSave = async (formEl: FormInstance | undefined) => {
             },
         )
             .then(async () => {
+                let params = {
+                    key: 'PermitRootLogin',
+                    oldValue: '',
+                    newValue: form.permitRootLogin,
+                };
                 loading.value = true;
-                await updateSSH('PermitRootLogin', form.permitRootLogin)
+                await updateSSH(params)
                     .then(() => {
                         loading.value = false;
                         handleClose();
@@ -110,7 +116,7 @@ const loadPermitLabel = (value: string) => {
 };
 
 const handleClose = () => {
-    drawerVisiable.value = false;
+    drawerVisible.value = false;
 };
 
 defineExpose({

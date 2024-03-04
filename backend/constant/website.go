@@ -27,6 +27,7 @@ const (
 	DnsManual  = "dnsManual"
 	Http       = "http"
 	Manual     = "manual"
+	SelfSigned = "selfSigned"
 
 	StartWeb = "start"
 	StopWeb  = "stop"
@@ -45,4 +46,10 @@ const (
 
 	ConfigPHP = "php"
 	ConfigFPM = "fpm"
+
+	SSLInit       = "init"
+	SSLError      = "error"
+	SSLReady      = "ready"
+	SSLApply      = "applying"
+	SSLApplyError = "applyError"
 )

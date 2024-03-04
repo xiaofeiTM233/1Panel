@@ -2,6 +2,10 @@ package docker
 
 import (
 	"context"
+
+	"github.com/docker/docker/api/types/container"
+
+	"github.com/1Panel-dev/1Panel/backend/app/model"
 	"github.com/1Panel-dev/1Panel/backend/global"
 
 	"github.com/docker/docker/api/types"
@@ -14,7 +18,12 @@ type Client struct {
 }
 
 func NewClient() (Client, error) {
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	var settingItem model.Setting
+	_ = global.DB.Where("key = ?", "DockerSockPath").First(&settingItem).Error
+	if len(settingItem.Value) == 0 {
+		settingItem.Value = "unix:///var/run/docker.sock"
+	}
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithHost(settingItem.Value), client.WithAPIVersionNegotiation())
 	if err != nil {
 		return Client{}, err
 	}
@@ -25,28 +34,29 @@ func NewClient() (Client, error) {
 }
 
 func NewDockerClient() (*client.Client, error) {
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	var settingItem model.Setting
+	_ = global.DB.Where("key = ?", "DockerSockPath").First(&settingItem).Error
+	if len(settingItem.Value) == 0 {
+		settingItem.Value = "unix:///var/run/docker.sock"
+	}
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithHost(settingItem.Value), client.WithAPIVersionNegotiation())
 	if err != nil {
 		return nil, err
 	}
 	return cli, nil
 }
 
-func (c Client) ListAllContainers() ([]types.Container, error) {
-	var options types.ContainerListOptions
-	containers, err := c.cli.ContainerList(context.Background(), options)
-	if err != nil {
-		return nil, err
-	}
-	return containers, nil
-}
-
 func (c Client) ListContainersByName(names []string) ([]types.Container, error) {
-	var options types.ContainerListOptions
+	var (
+		options  container.ListOptions
+		namesMap = make(map[string]bool)
+		res      []types.Container
+	)
 	options.All = true
 	if len(names) > 0 {
 		var array []filters.KeyValuePair
 		for _, n := range names {
+			namesMap["/"+n] = true
 			array = append(array, filters.Arg("name", n))
 		}
 		options.Filters = filters.NewArgs(array...)
@@ -55,7 +65,12 @@ func (c Client) ListContainersByName(names []string) ([]types.Container, error) 
 	if err != nil {
 		return nil, err
 	}
-	return containers, nil
+	for _, con := range containers {
+		if _, ok := namesMap[con.Names[0]]; ok {
+			res = append(res, con)
+		}
+	}
+	return res, nil
 }
 
 func (c Client) CreateNetwork(name string) error {
@@ -67,6 +82,26 @@ func (c Client) CreateNetwork(name string) error {
 
 func (c Client) DeleteImage(imageID string) error {
 	if _, err := c.cli.ImageRemove(context.Background(), imageID, types.ImageRemoveOptions{Force: true}); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c Client) InspectContainer(containerID string) (types.ContainerJSON, error) {
+	return c.cli.ContainerInspect(context.Background(), containerID)
+}
+
+func (c Client) PullImage(imageName string, force bool) error {
+	if !force {
+		exist, err := c.CheckImageExist(imageName)
+		if err != nil {
+			return err
+		}
+		if exist {
+			return nil
+		}
+	}
+	if _, err := c.cli.ImagePull(context.Background(), imageName, types.ImagePullOptions{}); err != nil {
 		return err
 	}
 	return nil
@@ -85,6 +120,18 @@ func (c Client) GetImageIDByName(imageName string) (string, error) {
 		return list[0].ID, nil
 	}
 	return "", nil
+}
+
+func (c Client) CheckImageExist(imageName string) (bool, error) {
+	filter := filters.NewArgs()
+	filter.Add("reference", imageName)
+	list, err := c.cli.ImageList(context.Background(), types.ImageListOptions{
+		Filters: filter,
+	})
+	if err != nil {
+		return false, err
+	}
+	return len(list) > 0, nil
 }
 
 func (c Client) NetworkExist(name string) bool {

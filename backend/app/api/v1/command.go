@@ -4,7 +4,6 @@ import (
 	"github.com/1Panel-dev/1Panel/backend/app/api/v1/helper"
 	"github.com/1Panel-dev/1Panel/backend/app/dto"
 	"github.com/1Panel-dev/1Panel/backend/constant"
-	"github.com/1Panel-dev/1Panel/backend/global"
 	"github.com/gin-gonic/gin"
 )
 
@@ -16,17 +15,13 @@ import (
 // @Success 200
 // @Security ApiKeyAuth
 // @Router /hosts/command [post]
-// @x-panel-log {"bodyKeys":["name","command"],"paramKeys":[],"BeforeFuntions":[],"formatZH":"创建快捷命令 [name][command]","formatEN":"create quick command [name][command]"}
+// @x-panel-log {"bodyKeys":["name","command"],"paramKeys":[],"BeforeFunctions":[],"formatZH":"创建快捷命令 [name][command]","formatEN":"create quick command [name][command]"}
 func (b *BaseApi) CreateCommand(c *gin.Context) {
 	var req dto.CommandOperate
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
 		return
 	}
-	if err := global.VALID.Struct(req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
-		return
-	}
+
 	if err := commandService.Create(req); err != nil {
 		helper.ErrorWithDetail(c, constant.CodeErrInternalServer, constant.ErrTypeInternalServer, err)
 		return
@@ -43,9 +38,8 @@ func (b *BaseApi) CreateCommand(c *gin.Context) {
 // @Security ApiKeyAuth
 // @Router /hosts/command/search [post]
 func (b *BaseApi) SearchCommand(c *gin.Context) {
-	var req dto.SearchWithPage
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+	var req dto.SearchCommandWithPage
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
 		return
 	}
 
@@ -59,6 +53,23 @@ func (b *BaseApi) SearchCommand(c *gin.Context) {
 		Items: list,
 		Total: total,
 	})
+}
+
+// @Tags Command
+// @Summary Tree commands
+// @Description 获取快速命令树
+// @Accept json
+// @Success 200 {Array} dto.CommandTree
+// @Security ApiKeyAuth
+// @Router /hosts/command/tree [get]
+func (b *BaseApi) SearchCommandTree(c *gin.Context) {
+	list, err := commandService.SearchForTree()
+	if err != nil {
+		helper.ErrorWithDetail(c, constant.CodeErrInternalServer, constant.ErrTypeInternalServer, err)
+		return
+	}
+
+	helper.SuccessWithData(c, list)
 }
 
 // @Tags Command
@@ -85,15 +96,10 @@ func (b *BaseApi) ListCommand(c *gin.Context) {
 // @Success 200
 // @Security ApiKeyAuth
 // @Router /hosts/command/del [post]
-// @x-panel-log {"bodyKeys":["ids"],"paramKeys":[],"BeforeFuntions":[{"input_colume":"id","input_value":"ids","isList":true,"db":"commands","output_colume":"name","output_value":"names"}],"formatZH":"删除快捷命令 [names]","formatEN":"delete quick command [names]"}
+// @x-panel-log {"bodyKeys":["ids"],"paramKeys":[],"BeforeFunctions":[{"input_column":"id","input_value":"ids","isList":true,"db":"commands","output_column":"name","output_value":"names"}],"formatZH":"删除快捷命令 [names]","formatEN":"delete quick command [names]"}
 func (b *BaseApi) DeleteCommand(c *gin.Context) {
 	var req dto.BatchDeleteReq
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
-		return
-	}
-	if err := global.VALID.Struct(req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
 		return
 	}
 
@@ -112,20 +118,16 @@ func (b *BaseApi) DeleteCommand(c *gin.Context) {
 // @Success 200
 // @Security ApiKeyAuth
 // @Router /hosts/command/update [post]
-// @x-panel-log {"bodyKeys":["name"],"paramKeys":[],"BeforeFuntions":[],"formatZH":"更新快捷命令 [name]","formatEN":"update quick command [name]"}
+// @x-panel-log {"bodyKeys":["name"],"paramKeys":[],"BeforeFunctions":[],"formatZH":"更新快捷命令 [name]","formatEN":"update quick command [name]"}
 func (b *BaseApi) UpdateCommand(c *gin.Context) {
 	var req dto.CommandOperate
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
-		return
-	}
-	if err := global.VALID.Struct(req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
 		return
 	}
 
 	upMap := make(map[string]interface{})
 	upMap["name"] = req.Name
+	upMap["group_id"] = req.GroupID
 	upMap["command"] = req.Command
 	if err := commandService.Update(req.ID, upMap); err != nil {
 		helper.ErrorWithDetail(c, constant.CodeErrInternalServer, constant.ErrTypeInternalServer, err)

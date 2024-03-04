@@ -16,19 +16,8 @@ builds:
       - -trimpath
     ldflags:
       - -w -s
-      - --extldflags "-static -fpic"
-    tags:
-      - osusergo
     env:
-      - CGO_ENABLED=1
-      - >-
-        {{- if eq .Arch "amd64"}}CC=x86_64-linux-gnu-gcc{{- end }}
-        {{- if eq .Arch "arm64"}}CC=aarch64-linux-gnu-gcc{{- end }}
-        {{- if eq .Arch "arm"}}CC=arm-linux-gnueabihf-gcc{{- end }}
-        {{- if eq .Arch "loong64"}}CC=loongarch64-linux-gnu-gcc{{- end }}
-        {{- if eq .Arch "ppc64le"}}CC=powerpc64le-linux-gnu-gcc{{- end }}
-        {{- if eq .Arch "s390x"}}CC=s390x-linux-gnu-gcc{{- end }}
-        {{- if eq .Arch "loong64"}}CC=loongarch64-linux-gnu-gcc{{- end }}
+      - CGO_ENABLED=0
     goos:
       - linux
     goarm:
@@ -39,13 +28,10 @@ builds:
       - arm
       - ppc64le
       - s390x
-    ignore:
-      - goos: linux
-        goarch: loong64
 
 archives:
   - format: tar.gz
-    name_template: "{{ .ProjectName }}-v{{ .Version }}-{{ .Os }}-{{ .Arch }}"
+    name_template: "1panel-v{{ .Version }}-{{ .Os }}-{{ .Arch }}{{- if .Arm }}v{{ .Arm }}{{ end }}"
     wrap_in_directory: true
     files:
       - 1pctl

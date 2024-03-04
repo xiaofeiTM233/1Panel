@@ -1,6 +1,6 @@
 <template>
     <el-drawer
-        v-model="terminalVisiable"
+        v-model="terminalVisible"
         @close="handleClose"
         :destroy-on-close="true"
         :close-on-click-modal="false"
@@ -10,7 +10,7 @@
             <DrawerHeader :header="$t('container.containerTerminal')" :resource="title" :back="handleClose" />
         </template>
         <el-form ref="formRef" :model="form" label-position="top">
-            <el-form-item :label="$t('container.user')" prop="user">
+            <el-form-item :label="$t('commons.table.user')" prop="user">
                 <el-input placeholder="root" clearable v-model="form.user" />
             </el-form-item>
             <el-form-item
@@ -43,21 +43,25 @@
             <el-button v-if="!terminalOpen" @click="initTerm(formRef)">
                 {{ $t('commons.button.conn') }}
             </el-button>
-            <el-button v-else @click="handleClose()">{{ $t('commons.button.disconn') }}</el-button>
-            <Terminal style="height: calc(100vh - 302px)" ref="terminalRef"></Terminal>
+            <el-button v-else @click="onClose()">{{ $t('commons.button.disconn') }}</el-button>
+            <Terminal
+                style="height: calc(100vh - 302px); margin-top: 18px"
+                ref="terminalRef"
+                v-if="terminalOpen"
+            ></Terminal>
         </el-form>
     </el-drawer>
 </template>
 
 <script lang="ts" setup>
-import { reactive, ref } from 'vue';
+import { reactive, ref, nextTick } from 'vue';
 import { ElForm, FormInstance } from 'element-plus';
 import { Rules } from '@/global/form-rules';
 import Terminal from '@/components/terminal/index.vue';
 import DrawerHeader from '@/components/drawer-header/index.vue';
 
 const title = ref();
-const terminalVisiable = ref(false);
+const terminalVisible = ref(false);
 const terminalOpen = ref(false);
 const form = reactive({
     isCustom: false,
@@ -73,7 +77,7 @@ interface DialogProps {
     container: string;
 }
 const acceptParams = async (params: DialogProps): Promise<void> => {
-    terminalVisiable.value = true;
+    terminalVisible.value = true;
     form.containerID = params.containerID;
     title.value = params.container;
     form.isCustom = false;
@@ -91,18 +95,24 @@ const initTerm = (formEl: FormInstance | undefined) => {
     formEl.validate(async (valid) => {
         if (!valid) return;
         terminalOpen.value = true;
+        await nextTick();
         terminalRef.value!.acceptParams({
             endpoint: '/api/v1/containers/exec',
             args: `containerid=${form.containerID}&user=${form.user}&command=${form.command}`,
             error: '',
+            initCmd: '',
         });
     });
 };
 
-function handleClose() {
+const onClose = () => {
     terminalRef.value?.onClose();
-    terminalVisiable.value = false;
     terminalOpen.value = false;
+};
+
+function handleClose() {
+    onClose();
+    terminalVisible.value = false;
 }
 
 defineExpose({

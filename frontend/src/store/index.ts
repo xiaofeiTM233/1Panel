@@ -18,14 +18,19 @@ export const GlobalStore = defineStore({
         themeConfig: {
             panelName: '',
             primary: '#005EEB',
-            theme: 'bright',
+            theme: 'auto',
             footer: true,
         },
         isFullScreen: false,
+        isOnRestart: false,
         agreeLicense: false,
         hasNewVersion: false,
         ignoreCaptcha: true,
         device: DeviceType.Desktop,
+        lastFilePath: '',
+        currentDB: '',
+        showEntranceWarn: true,
+        defaultNetwork: 'all',
     }),
     getters: {},
     actions: {
@@ -59,6 +64,18 @@ export const GlobalStore = defineStore({
         },
         isMobile() {
             return this.device === DeviceType.Mobile;
+        },
+        setLastFilePath(path: string) {
+            this.lastFilePath = path;
+        },
+        setCurrentDB(name: string) {
+            this.currentDB = name;
+        },
+        setShowEntranceWarn(show: boolean) {
+            this.showEntranceWarn = show;
+        },
+        setDefaultNetwork(net: string) {
+            this.defaultNetwork = net;
         },
     },
     persist: piniaPersistConfig('GlobalState'),

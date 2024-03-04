@@ -2,8 +2,16 @@ package dto
 
 import "time"
 
+type SSHUpdate struct {
+	Key      string `json:"key" validate:"required"`
+	OldValue string `json:"oldValue"`
+	NewValue string `json:"newValue"`
+}
+
 type SSHInfo struct {
+	AutoStart              bool   `json:"autoStart"`
 	Status                 string `json:"status"`
+	Message                string `json:"message"`
 	Port                   string `json:"port"`
 	ListenAddress          string `json:"listenAddress"`
 	PasswordAuthentication string `json:"passwordAuthentication"`
@@ -35,10 +43,11 @@ type SSHLog struct {
 	SuccessfulCount int          `json:"successfulCount"`
 	FailedCount     int          `json:"failedCount"`
 }
+
 type SSHHistory struct {
 	Date     time.Time `json:"date"`
 	DateStr  string    `json:"dateStr"`
-	IsLocal  bool      `json:"isLocal"`
+	Area     string    `json:"area"`
 	User     string    `json:"user"`
 	AuthMode string    `json:"authMode"`
 	Address  string    `json:"address"`

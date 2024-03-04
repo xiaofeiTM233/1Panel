@@ -2,9 +2,11 @@ import { File } from '@/api/interface/file';
 import http from '@/api';
 import { AxiosRequestConfig } from 'axios';
 import { ResPage } from '../interface';
+import { TimeoutEnum } from '@/enums/http-enum';
+import { ReqPage } from '@/api/interface';
 
 export const GetFilesList = (params: File.ReqFile) => {
-    return http.post<File.File>('files/search', params, 200000);
+    return http.post<File.File>('files/search', params, TimeoutEnum.T_5M);
 };
 
 export const GetUploadList = (params: File.SearchUploadInfo) => {
@@ -31,16 +33,12 @@ export const ChangeFileMode = (form: File.FileCreate) => {
     return http.post<File.File>('files/mode', form);
 };
 
-export const LoadFile = (form: File.FilePath) => {
-    return http.post<string>('files/loadfile', form);
-};
-
 export const CompressFile = (form: File.FileCompress) => {
-    return http.post<File.File>('files/compress', form);
+    return http.post<File.File>('files/compress', form, TimeoutEnum.T_10M);
 };
 
 export const DeCompressFile = (form: File.FileDeCompress) => {
-    return http.post<File.File>('files/decompress', form);
+    return http.post<File.File>('files/decompress', form, TimeoutEnum.T_10M);
 };
 
 export const GetFileContent = (params: File.ReqFile) => {
@@ -80,11 +78,7 @@ export const MoveFile = (params: File.FileMove) => {
 };
 
 export const DownloadFile = (params: File.FileDownload) => {
-    return http.download<BlobPart>('files/download', params, { responseType: 'blob', timeout: 20000 });
-};
-
-export const DownloadByPath = (path: string) => {
-    return http.download<BlobPart>('files/download/bypath', { path: path }, { responseType: 'blob', timeout: 40000 });
+    return http.download<BlobPart>('files/download', params, { responseType: 'blob', timeout: TimeoutEnum.T_40S });
 };
 
 export const ComputeDirSize = (params: File.DirSizeReq) => {
@@ -93,4 +87,40 @@ export const ComputeDirSize = (params: File.DirSizeReq) => {
 
 export const FileKeys = () => {
     return http.get<File.FileKeys>('files/keys');
+};
+
+export const getRecycleList = (params: ReqPage) => {
+    return http.post<ResPage<File.RecycleBin>>('files/recycle/search', params);
+};
+
+export const reduceFile = (params: File.RecycleBinReduce) => {
+    return http.post<any>('files/recycle/reduce', params);
+};
+
+export const clearRecycle = () => {
+    return http.post<any>('files/recycle/clear');
+};
+
+export const SearchFavorite = (params: ReqPage) => {
+    return http.post<ResPage<File.Favorite>>('files/favorite/search', params);
+};
+
+export const AddFavorite = (path: string) => {
+    return http.post<any>('files/favorite', { path: path });
+};
+
+export const ReadByLine = (req: File.FileReadByLine) => {
+    return http.post<any>('files/read', req);
+};
+
+export const RemoveFavorite = (id: number) => {
+    return http.post<any>('files/favorite/del', { id: id });
+};
+
+export const BatchChangeRole = (params: File.FileRole) => {
+    return http.post<any>('files/batch/role', params);
+};
+
+export const GetRecycleStatus = () => {
+    return http.get<string>('files/recycle/status');
 };

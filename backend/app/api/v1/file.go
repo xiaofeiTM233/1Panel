@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -34,8 +35,7 @@ import (
 // @Router /files/search [post]
 func (b *BaseApi) ListFiles(c *gin.Context) {
 	var req request.FileOption
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
 		return
 	}
 	files, err := fileService.GetFileList(req)
@@ -51,17 +51,12 @@ func (b *BaseApi) ListFiles(c *gin.Context) {
 // @Description 分页获取上传文件
 // @Accept json
 // @Param request body request.SearchUploadWithPage true "request"
-// @Success 200 {anrry} response.FileInfo
+// @Success 200 {array} response.FileInfo
 // @Security ApiKeyAuth
 // @Router /files/upload/search [post]
 func (b *BaseApi) SearchUploadWithPage(c *gin.Context) {
 	var req request.SearchUploadWithPage
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
-		return
-	}
-	if err := global.VALID.Struct(req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
 		return
 	}
 	total, files, err := fileService.SearchUploadWithPage(req)
@@ -80,13 +75,12 @@ func (b *BaseApi) SearchUploadWithPage(c *gin.Context) {
 // @Description 加载文件树
 // @Accept json
 // @Param request body request.FileOption true "request"
-// @Success 200 {anrry} response.FileTree
+// @Success 200 {array} response.FileTree
 // @Security ApiKeyAuth
 // @Router /files/tree [post]
 func (b *BaseApi) GetFileTree(c *gin.Context) {
 	var req request.FileOption
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
 		return
 	}
 	tree, err := fileService.GetFileTree(req)
@@ -105,11 +99,10 @@ func (b *BaseApi) GetFileTree(c *gin.Context) {
 // @Success 200
 // @Security ApiKeyAuth
 // @Router /files [post]
-// @x-panel-log {"bodyKeys":["path"],"paramKeys":[],"BeforeFuntions":[],"formatZH":"创建文件/文件夹 [path]","formatEN":"Create dir or file [path]"}
+// @x-panel-log {"bodyKeys":["path"],"paramKeys":[],"BeforeFunctions":[],"formatZH":"创建文件/文件夹 [path]","formatEN":"Create dir or file [path]"}
 func (b *BaseApi) CreateFile(c *gin.Context) {
 	var req request.FileCreate
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
 		return
 	}
 	err := fileService.Create(req)
@@ -128,11 +121,10 @@ func (b *BaseApi) CreateFile(c *gin.Context) {
 // @Success 200
 // @Security ApiKeyAuth
 // @Router /files/del [post]
-// @x-panel-log {"bodyKeys":["path"],"paramKeys":[],"BeforeFuntions":[],"formatZH":"删除文件/文件夹 [path]","formatEN":"Delete dir or file [path]"}
+// @x-panel-log {"bodyKeys":["path"],"paramKeys":[],"BeforeFunctions":[],"formatZH":"删除文件/文件夹 [path]","formatEN":"Delete dir or file [path]"}
 func (b *BaseApi) DeleteFile(c *gin.Context) {
 	var req request.FileDelete
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
 		return
 	}
 	err := fileService.Delete(req)
@@ -151,11 +143,10 @@ func (b *BaseApi) DeleteFile(c *gin.Context) {
 // @Success 200
 // @Security ApiKeyAuth
 // @Router /files/batch/del [post]
-// @x-panel-log {"bodyKeys":["paths"],"paramKeys":[],"BeforeFuntions":[],"formatZH":"批量删除文件/文件夹 [paths]","formatEN":"Batch delete dir or file [paths]"}
+// @x-panel-log {"bodyKeys":["paths"],"paramKeys":[],"BeforeFunctions":[],"formatZH":"批量删除文件/文件夹 [paths]","formatEN":"Batch delete dir or file [paths]"}
 func (b *BaseApi) BatchDeleteFile(c *gin.Context) {
 	var req request.FileBatchDelete
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
 		return
 	}
 	err := fileService.BatchDelete(req)
@@ -174,11 +165,10 @@ func (b *BaseApi) BatchDeleteFile(c *gin.Context) {
 // @Success 200
 // @Security ApiKeyAuth
 // @Router /files/mode [post]
-// @x-panel-log {"bodyKeys":["path","mode"],"paramKeys":[],"BeforeFuntions":[],"formatZH":"修改权限 [paths] => [mode]","formatEN":"Change mode [paths] => [mode]"}
+// @x-panel-log {"bodyKeys":["path","mode"],"paramKeys":[],"BeforeFunctions":[],"formatZH":"修改权限 [paths] => [mode]","formatEN":"Change mode [paths] => [mode]"}
 func (b *BaseApi) ChangeFileMode(c *gin.Context) {
 	var req request.FileCreate
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
 		return
 	}
 	err := fileService.ChangeMode(req)
@@ -197,11 +187,10 @@ func (b *BaseApi) ChangeFileMode(c *gin.Context) {
 // @Success 200
 // @Security ApiKeyAuth
 // @Router /files/owner [post]
-// @x-panel-log {"bodyKeys":["path","user","group"],"paramKeys":[],"BeforeFuntions":[],"formatZH":"修改用户/组 [paths] => [user]/[group]","formatEN":"Change owner [paths] => [user]/[group]"}
+// @x-panel-log {"bodyKeys":["path","user","group"],"paramKeys":[],"BeforeFunctions":[],"formatZH":"修改用户/组 [paths] => [user]/[group]","formatEN":"Change owner [paths] => [user]/[group]"}
 func (b *BaseApi) ChangeFileOwner(c *gin.Context) {
 	var req request.FileRoleUpdate
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
 		return
 	}
 	if err := fileService.ChangeOwner(req); err != nil {
@@ -219,11 +208,10 @@ func (b *BaseApi) ChangeFileOwner(c *gin.Context) {
 // @Success 200
 // @Security ApiKeyAuth
 // @Router /files/compress [post]
-// @x-panel-log {"bodyKeys":["name"],"paramKeys":[],"BeforeFuntions":[],"formatZH":"压缩文件 [name]","formatEN":"Compress file [name]"}
+// @x-panel-log {"bodyKeys":["name"],"paramKeys":[],"BeforeFunctions":[],"formatZH":"压缩文件 [name]","formatEN":"Compress file [name]"}
 func (b *BaseApi) CompressFile(c *gin.Context) {
 	var req request.FileCompress
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
 		return
 	}
 	err := fileService.Compress(req)
@@ -242,11 +230,10 @@ func (b *BaseApi) CompressFile(c *gin.Context) {
 // @Success 200
 // @Security ApiKeyAuth
 // @Router /files/decompress [post]
-// @x-panel-log {"bodyKeys":["path"],"paramKeys":[],"BeforeFuntions":[],"formatZH":"解压 [path]","formatEN":"Decompress file [path]"}
+// @x-panel-log {"bodyKeys":["path"],"paramKeys":[],"BeforeFunctions":[],"formatZH":"解压 [path]","formatEN":"Decompress file [path]"}
 func (b *BaseApi) DeCompressFile(c *gin.Context) {
 	var req request.FileDeCompress
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
 		return
 	}
 	err := fileService.DeCompress(req)
@@ -261,15 +248,14 @@ func (b *BaseApi) DeCompressFile(c *gin.Context) {
 // @Summary Load file content
 // @Description 获取文件内容
 // @Accept json
-// @Param request body request.FileOption true "request"
+// @Param request body request.FileContentReq true "request"
 // @Success 200 {object} response.FileInfo
 // @Security ApiKeyAuth
 // @Router /files/content [post]
-// @x-panel-log {"bodyKeys":["path"],"paramKeys":[],"BeforeFuntions":[],"formatZH":"获取文件内容 [path]","formatEN":"Load file content [path]"}
+// @x-panel-log {"bodyKeys":["path"],"paramKeys":[],"BeforeFunctions":[],"formatZH":"获取文件内容 [path]","formatEN":"Load file content [path]"}
 func (b *BaseApi) GetContent(c *gin.Context) {
-	var req request.FileOption
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+	var req request.FileContentReq
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
 		return
 	}
 	info, err := fileService.GetContent(req)
@@ -288,11 +274,10 @@ func (b *BaseApi) GetContent(c *gin.Context) {
 // @Success 200
 // @Security ApiKeyAuth
 // @Router /files/save [post]
-// @x-panel-log {"bodyKeys":["path"],"paramKeys":[],"BeforeFuntions":[],"formatZH":"更新文件内容 [path]","formatEN":"Update file content [path]"}
+// @x-panel-log {"bodyKeys":["path"],"paramKeys":[],"BeforeFunctions":[],"formatZH":"更新文件内容 [path]","formatEN":"Update file content [path]"}
 func (b *BaseApi) SaveContent(c *gin.Context) {
 	var req request.FileEdit
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
 		return
 	}
 	if err := fileService.SaveContent(req); err != nil {
@@ -309,7 +294,7 @@ func (b *BaseApi) SaveContent(c *gin.Context) {
 // @Success 200
 // @Security ApiKeyAuth
 // @Router /files/upload [post]
-// @x-panel-log {"bodyKeys":["path"],"paramKeys":[],"BeforeFuntions":[],"formatZH":"上传文件 [path]","formatEN":"Upload file [path]"}
+// @x-panel-log {"bodyKeys":["path"],"paramKeys":[],"BeforeFunctions":[],"formatZH":"上传文件 [path]","formatEN":"Upload file [path]"}
 func (b *BaseApi) UploadFiles(c *gin.Context) {
 	form, err := c.MultipartForm()
 	if err != nil {
@@ -355,24 +340,16 @@ func (b *BaseApi) UploadFiles(c *gin.Context) {
 // @Success 200
 // @Security ApiKeyAuth
 // @Router /files/check [post]
-// @x-panel-log {"bodyKeys":["path"],"paramKeys":[],"BeforeFuntions":[],"formatZH":"检测文件 [path] 是否存在","formatEN":"Check whether file [path] exists"}
 func (b *BaseApi) CheckFile(c *gin.Context) {
 	var req request.FilePathCheck
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
 		return
 	}
-	if err := global.VALID.Struct(req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+	if _, err := os.Stat(req.Path); err != nil {
+		helper.SuccessWithData(c, false)
 		return
 	}
-
-	if _, err := os.Stat(req.Path); err != nil && os.IsNotExist(err) {
-		helper.SuccessWithData(c, true)
-		return
-	}
-
-	helper.SuccessWithData(c, false)
+	helper.SuccessWithData(c, true)
 }
 
 // @Tags File
@@ -383,11 +360,10 @@ func (b *BaseApi) CheckFile(c *gin.Context) {
 // @Success 200
 // @Security ApiKeyAuth
 // @Router /files/rename [post]
-// @x-panel-log {"bodyKeys":["oldName","newName"],"paramKeys":[],"BeforeFuntions":[],"formatZH":"重命名 [oldName] => [newName]","formatEN":"Rename [oldName] => [newName]"}
+// @x-panel-log {"bodyKeys":["oldName","newName"],"paramKeys":[],"BeforeFunctions":[],"formatZH":"重命名 [oldName] => [newName]","formatEN":"Rename [oldName] => [newName]"}
 func (b *BaseApi) ChangeFileName(c *gin.Context) {
 	var req request.FileRename
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
 		return
 	}
 	if err := fileService.ChangeName(req); err != nil {
@@ -405,11 +381,10 @@ func (b *BaseApi) ChangeFileName(c *gin.Context) {
 // @Success 200
 // @Security ApiKeyAuth
 // @Router /files/wget [post]
-// @x-panel-log {"bodyKeys":["url","path","name"],"paramKeys":[],"BeforeFuntions":[],"formatZH":"下载 url => [path]/[name]","formatEN":"Download url => [path]/[name]"}
+// @x-panel-log {"bodyKeys":["url","path","name"],"paramKeys":[],"BeforeFunctions":[],"formatZH":"下载 url => [path]/[name]","formatEN":"Download url => [path]/[name]"}
 func (b *BaseApi) WgetFile(c *gin.Context) {
 	var req request.FileWget
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
 		return
 	}
 	key, err := fileService.Wget(req)
@@ -430,11 +405,10 @@ func (b *BaseApi) WgetFile(c *gin.Context) {
 // @Success 200
 // @Security ApiKeyAuth
 // @Router /files/move [post]
-// @x-panel-log {"bodyKeys":["oldPaths","newPath"],"paramKeys":[],"BeforeFuntions":[],"formatZH":"移动文件 [oldPaths] => [newPath]","formatEN":"Move [oldPaths] => [newPath]"}
+// @x-panel-log {"bodyKeys":["oldPaths","newPath"],"paramKeys":[],"BeforeFunctions":[],"formatZH":"移动文件 [oldPaths] => [newPath]","formatEN":"Move [oldPaths] => [newPath]"}
 func (b *BaseApi) MoveFile(c *gin.Context) {
 	var req request.FileMove
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
 		return
 	}
 	if err := fileService.MvFile(req); err != nil {
@@ -448,45 +422,96 @@ func (b *BaseApi) MoveFile(c *gin.Context) {
 // @Summary Download file
 // @Description 下载文件
 // @Accept json
+// @Success 200
+// @Security ApiKeyAuth
+// @Router /files/download [get]
+func (b *BaseApi) Download(c *gin.Context) {
+	filePath := c.Query("path")
+	file, err := os.Open(filePath)
+	if err != nil {
+		helper.ErrorWithDetail(c, constant.CodeErrInternalServer, constant.ErrTypeInternalServer, err)
+	}
+	info, _ := file.Stat()
+	c.Header("Content-Length", strconv.FormatInt(info.Size(), 10))
+	c.Header("Content-Disposition", "attachment; filename*=utf-8''"+url.PathEscape(info.Name()))
+	http.ServeContent(c.Writer, c.Request, info.Name(), info.ModTime(), file)
+}
+
+// @Tags File
+// @Summary Chunk Download file
+// @Description 分片下载下载文件
+// @Accept json
 // @Param request body request.FileDownload true "request"
 // @Success 200
 // @Security ApiKeyAuth
-// @Router /files/download [post]
-// @x-panel-log {"bodyKeys":["name"],"paramKeys":[],"BeforeFuntions":[],"formatZH":"下载文件 [name]","formatEN":"Download file [name]"}
-func (b *BaseApi) Download(c *gin.Context) {
-	var req request.FileDownload
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+// @Router /files/chunkdownload [post]
+// @x-panel-log {"bodyKeys":["name"],"paramKeys":[],"BeforeFunctions":[],"formatZH":"下载文件 [name]","formatEN":"Download file [name]"}
+func (b *BaseApi) DownloadChunkFiles(c *gin.Context) {
+	var req request.FileChunkDownload
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
 		return
 	}
-	filePath, err := fileService.FileDownload(req)
+	fileOp := files.NewFileOp()
+	if !fileOp.Stat(req.Path) {
+		helper.ErrorWithDetail(c, constant.CodeErrInternalServer, constant.ErrPathNotFound, nil)
+		return
+	}
+	filePath := req.Path
+	fstFile, err := fileOp.OpenFile(filePath)
 	if err != nil {
 		helper.ErrorWithDetail(c, constant.CodeErrInternalServer, constant.ErrTypeInternalServer, err)
 		return
 	}
-	c.File(filePath)
-}
+	info, err := fstFile.Stat()
+	if err != nil {
+		helper.ErrorWithDetail(c, constant.CodeErrInternalServer, constant.ErrTypeInternalServer, err)
+		return
+	}
+	if info.IsDir() {
+		helper.ErrorWithDetail(c, constant.CodeErrInternalServer, constant.ErrFileDownloadDir, err)
+		return
+	}
 
-// @Tags File
-// @Summary Download file with path
-// @Description 下载指定文件
-// @Accept json
-// @Param request body dto.FilePath true "request"
-// @Success 200
-// @Security ApiKeyAuth
-// @Router /files/download/bypath [post]
-// @x-panel-log {"bodyKeys":["path"],"paramKeys":[],"BeforeFuntions":[],"formatZH":"下载文件 [path]","formatEN":"Download file [path]"}
-func (b *BaseApi) DownloadFile(c *gin.Context) {
-	var req dto.FilePath
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
-		return
+	c.Writer.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", req.Name))
+	c.Writer.Header().Set("Content-Type", "application/octet-stream")
+	c.Writer.Header().Set("Content-Length", strconv.FormatInt(info.Size(), 10))
+	c.Writer.Header().Set("Accept-Ranges", "bytes")
+
+	if c.Request.Header.Get("Range") != "" {
+		rangeHeader := c.Request.Header.Get("Range")
+		rangeArr := strings.Split(rangeHeader, "=")[1]
+		rangeParts := strings.Split(rangeArr, "-")
+
+		startPos, _ := strconv.ParseInt(rangeParts[0], 10, 64)
+
+		var endPos int64
+		if rangeParts[1] == "" {
+			endPos = info.Size() - 1
+		} else {
+			endPos, _ = strconv.ParseInt(rangeParts[1], 10, 64)
+		}
+
+		c.Writer.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", startPos, endPos, info.Size()))
+		c.Writer.WriteHeader(http.StatusPartialContent)
+
+		buffer := make([]byte, 1024*1024)
+		file, err := os.Open(filePath)
+		if err != nil {
+			helper.ErrorWithDetail(c, constant.CodeErrInternalServer, constant.ErrTypeInternalServer, err)
+			return
+		}
+		defer file.Close()
+
+		_, _ = file.Seek(startPos, 0)
+		reader := io.LimitReader(file, endPos-startPos+1)
+		_, err = io.CopyBuffer(c.Writer, reader, buffer)
+		if err != nil {
+			helper.ErrorWithDetail(c, constant.CodeErrInternalServer, constant.ErrTypeInternalServer, err)
+			return
+		}
+	} else {
+		c.File(filePath)
 	}
-	if err := global.VALID.Struct(req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
-		return
-	}
-	c.File(req.Path)
 }
 
 // @Tags File
@@ -497,11 +522,10 @@ func (b *BaseApi) DownloadFile(c *gin.Context) {
 // @Success 200
 // @Security ApiKeyAuth
 // @Router /files/size [post]
-// @x-panel-log {"bodyKeys":["path"],"paramKeys":[],"BeforeFuntions":[],"formatZH":"获取文件夹大小 [path]","formatEN":"Load file size [path]"}
+// @x-panel-log {"bodyKeys":["path"],"paramKeys":[],"BeforeFunctions":[],"formatZH":"获取文件夹大小 [path]","formatEN":"Load file size [path]"}
 func (b *BaseApi) Size(c *gin.Context) {
 	var req request.DirSizeReq
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
 		return
 	}
 	res, err := fileService.DirSize(req)
@@ -512,40 +536,14 @@ func (b *BaseApi) Size(c *gin.Context) {
 	helper.SuccessWithData(c, res)
 }
 
-// @Tags File
-// @Summary Read file
-// @Description 读取文件
-// @Accept json
-// @Param request body dto.FilePath true "request"
-// @Success 200 {string} content
-// @Security ApiKeyAuth
-// @Router /files/loadfile [post]
-func (b *BaseApi) LoadFromFile(c *gin.Context) {
-	var req dto.FilePath
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
-		return
-	}
-	if err := global.VALID.Struct(req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
-		return
-	}
-
-	content, err := os.ReadFile(req.Path)
-	if err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrInternalServer, constant.ErrTypeInternalServer, err)
-		return
-	}
-	helper.SuccessWithData(c, string(content))
-}
-
 func mergeChunks(fileName string, fileDir string, dstDir string, chunkCount int) error {
-	if _, err := os.Stat(path.Dir(dstDir)); err != nil && os.IsNotExist(err) {
-		if err = os.MkdirAll(path.Dir(dstDir), os.ModePerm); err != nil {
+	op := files.NewFileOp()
+	dstDir = strings.TrimSpace(dstDir)
+	if _, err := os.Stat(dstDir); err != nil && os.IsNotExist(err) {
+		if err = op.CreateDir(dstDir, os.ModePerm); err != nil {
 			return err
 		}
 	}
-
 	targetFile, err := os.Create(filepath.Join(dstDir, fileName))
 	if err != nil {
 		return err
@@ -575,6 +573,7 @@ func mergeChunks(fileName string, fileDir string, dstDir string, chunkCount int)
 // @Security ApiKeyAuth
 // @Router /files/chunkupload [post]
 func (b *BaseApi) UploadChunkFiles(c *gin.Context) {
+	var err error
 	fileForm, err := c.FormFile("chunk")
 	if err != nil {
 		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
@@ -585,19 +584,16 @@ func (b *BaseApi) UploadChunkFiles(c *gin.Context) {
 		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
 		return
 	}
-
 	chunkIndex, err := strconv.Atoi(c.PostForm("chunkIndex"))
 	if err != nil {
 		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
 		return
 	}
-
 	chunkCount, err := strconv.Atoi(c.PostForm("chunkCount"))
 	if err != nil {
 		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
 		return
 	}
-
 	fileOp := files.NewFileOp()
 	tmpDir := path.Join(global.CONF.System.TmpDir, "upload")
 	if !fileOp.Stat(tmpDir) {
@@ -606,37 +602,50 @@ func (b *BaseApi) UploadChunkFiles(c *gin.Context) {
 			return
 		}
 	}
-
 	filename := c.PostForm("filename")
 	fileDir := filepath.Join(tmpDir, filename)
-
-	_ = os.MkdirAll(fileDir, 0755)
+	if chunkIndex == 0 {
+		if fileOp.Stat(fileDir) {
+			_ = fileOp.DeleteDir(fileDir)
+		}
+		_ = os.MkdirAll(fileDir, 0755)
+	}
 	filePath := filepath.Join(fileDir, filename)
 
-	emptyFile, err := os.Create(filePath)
+	defer func() {
+		if err != nil {
+			_ = os.Remove(fileDir)
+		}
+	}()
+	var (
+		emptyFile *os.File
+		chunkData []byte
+	)
+
+	emptyFile, err = os.Create(filePath)
 	if err != nil {
 		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
 		return
 	}
 	defer emptyFile.Close()
 
-	chunkData, err := io.ReadAll(uploadFile)
+	chunkData, err = io.ReadAll(uploadFile)
 	if err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrFileUpload, err)
+		helper.ErrorWithDetail(c, constant.CodeErrInternalServer, constant.ErrTypeInternalServer, buserr.WithMap(constant.ErrFileUpload, map[string]interface{}{"name": filename, "detail": err.Error()}, err))
 		return
 	}
 
 	chunkPath := filepath.Join(fileDir, fmt.Sprintf("%s.%d", filename, chunkIndex))
 	err = os.WriteFile(chunkPath, chunkData, 0644)
 	if err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrInternalServer, constant.ErrFileUpload, err)
+		helper.ErrorWithDetail(c, constant.CodeErrInternalServer, constant.ErrTypeInternalServer, buserr.WithMap(constant.ErrFileUpload, map[string]interface{}{"name": filename, "detail": err.Error()}, err))
 		return
 	}
 
 	if chunkIndex+1 == chunkCount {
 		err = mergeChunks(filename, fileDir, c.PostForm("path"), chunkCount)
 		if err != nil {
-			helper.ErrorWithDetail(c, constant.CodeErrInternalServer, constant.ErrFileUpload, err)
+			helper.ErrorWithDetail(c, constant.CodeErrInternalServer, constant.ErrTypeInternalServer, buserr.WithMap(constant.ErrFileUpload, map[string]interface{}{"name": filename, "detail": err.Error()}, err))
 			return
 		}
 		helper.SuccessWithData(c, true)
@@ -651,19 +660,12 @@ var wsUpgrade = websocket.Upgrader{
 	},
 }
 
-var WsManager = websocket2.Manager{
-	Group:       make(map[string]*websocket2.Client),
-	Register:    make(chan *websocket2.Client, 128),
-	UnRegister:  make(chan *websocket2.Client, 128),
-	ClientCount: 0,
-}
-
 func (b *BaseApi) Ws(c *gin.Context) {
 	ws, err := wsUpgrade.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		return
 	}
-	wsClient := websocket2.NewWsClient("wsClient", ws)
+	wsClient := websocket2.NewWsClient("fileClient", ws)
 	go wsClient.Read()
 	go wsClient.Write()
 }
@@ -677,4 +679,44 @@ func (b *BaseApi) Keys(c *gin.Context) {
 	}
 	res.Keys = keys
 	helper.SuccessWithData(c, res)
+}
+
+// @Tags File
+// @Summary Read file by Line
+// @Description 按行读取日志文件
+// @Param request body request.FileReadByLineReq true "request"
+// @Success 200
+// @Security ApiKeyAuth
+// @Router /files/read [post]
+func (b *BaseApi) ReadFileByLine(c *gin.Context) {
+	var req request.FileReadByLineReq
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
+		return
+	}
+	res, err := fileService.ReadLogByLine(req)
+	if err != nil {
+		helper.ErrorWithDetail(c, constant.CodeErrInternalServer, constant.ErrTypeInternalServer, err)
+		return
+	}
+	helper.SuccessWithData(c, res)
+}
+
+// @Tags File
+// @Summary Batch change file mode and owner
+// @Description 批量修改文件权限和用户/组
+// @Accept json
+// @Param request body request.FileRoleReq true "request"
+// @Success 200
+// @Security ApiKeyAuth
+// @Router /files/batch/role [post]
+// @x-panel-log {"bodyKeys":["paths","mode","user","group"],"paramKeys":[],"BeforeFunctions":[],"formatZH":"批量修改文件权限和用户/组 [paths] => [mode]/[user]/[group]","formatEN":"Batch change file mode and owner [paths] => [mode]/[user]/[group]"}
+func (b *BaseApi) BatchChangeModeAndOwner(c *gin.Context) {
+	var req request.FileRoleReq
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
+		return
+	}
+	if err := fileService.BatchChangeModeAndOwner(req); err != nil {
+		helper.ErrorWithDetail(c, constant.CodeErrInternalServer, constant.ErrTypeInternalServer, err)
+	}
+	helper.SuccessWithOutData(c)
 }

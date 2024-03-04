@@ -3,12 +3,14 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path"
 	"strings"
 	"time"
 
 	"github.com/1Panel-dev/1Panel/backend/app/dto"
+	"github.com/1Panel-dev/1Panel/backend/buserr"
 	"github.com/1Panel-dev/1Panel/backend/constant"
 	"github.com/1Panel-dev/1Panel/backend/global"
 	"github.com/1Panel-dev/1Panel/backend/utils/cmd"
@@ -50,9 +52,11 @@ func (u *ImageRepoService) Login(req dto.OperateByID) error {
 	if err != nil {
 		return err
 	}
-	if err := u.CheckConn(repo.DownloadUrl, repo.Username, repo.Password); err != nil {
-		_ = imageRepoRepo.Update(repo.ID, map[string]interface{}{"status": constant.StatusFailed, "message": err.Error})
-		return err
+	if repo.Auth {
+		if err := u.CheckConn(repo.DownloadUrl, repo.Username, repo.Password); err != nil {
+			_ = imageRepoRepo.Update(repo.ID, map[string]interface{}{"status": constant.StatusFailed, "message": err.Error()})
+			return err
+		}
 	}
 	_ = imageRepoRepo.Update(repo.ID, map[string]interface{}{"status": constant.StatusSuccess})
 	return nil
@@ -74,6 +78,9 @@ func (u *ImageRepoService) List() ([]dto.ImageRepoOption, error) {
 }
 
 func (u *ImageRepoService) Create(req dto.ImageRepoCreate) error {
+	if cmd.CheckIllegal(req.Username, req.Password, req.DownloadUrl) {
+		return buserr.New(constant.ErrCmdIllegal)
+	}
 	imageRepo, _ := imageRepoRepo.Get(commonRepo.WithByName(req.Name))
 	if imageRepo.ID != 0 {
 		return constant.ErrRecordExist
@@ -85,12 +92,12 @@ func (u *ImageRepoService) Create(req dto.ImageRepoCreate) error {
 			return errors.New(string(stdout))
 		}
 		ticker := time.NewTicker(3 * time.Second)
-		ctx, cancle := context.WithTimeout(context.Background(), time.Second*20)
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
 		if err := func() error {
 			for range ticker.C {
 				select {
 				case <-ctx.Done():
-					cancle()
+					cancel()
 					return errors.New("the docker service cannot be restarted")
 				default:
 					stdout, err := cmd.Exec("systemctl is-active docker")
@@ -111,9 +118,11 @@ func (u *ImageRepoService) Create(req dto.ImageRepoCreate) error {
 	}
 
 	imageRepo.Status = constant.StatusSuccess
-	if err := u.CheckConn(req.DownloadUrl, req.Username, req.Password); err != nil {
-		imageRepo.Status = constant.StatusFailed
-		imageRepo.Message = err.Error()
+	if req.Auth {
+		if err := u.CheckConn(req.DownloadUrl, req.Username, req.Password); err != nil {
+			imageRepo.Status = constant.StatusFailed
+			imageRepo.Message = err.Error()
+		}
 	}
 	if err := imageRepoRepo.Create(&imageRepo); err != nil {
 		return err
@@ -138,14 +147,17 @@ func (u *ImageRepoService) Update(req dto.ImageRepoUpdate) error {
 	if req.ID == 1 {
 		return errors.New("The default value cannot be deleted !")
 	}
+	if cmd.CheckIllegal(req.Username, req.Password, req.DownloadUrl) {
+		return buserr.New(constant.ErrCmdIllegal)
+	}
 	repo, err := imageRepoRepo.Get(commonRepo.WithByID(req.ID))
 	if err != nil {
 		return err
 	}
-	if repo.DownloadUrl != req.DownloadUrl {
+	if repo.DownloadUrl != req.DownloadUrl || (!repo.Auth && req.Auth) {
 		_ = u.handleRegistries(req.DownloadUrl, repo.DownloadUrl, "update")
 		if repo.Auth {
-			_, _ = cmd.Execf("docker logout %s", repo.DownloadUrl)
+			_, _ = cmd.ExecWithCheck("docker", "logout", repo.DownloadUrl)
 		}
 		stdout, err := cmd.Exec("systemctl restart docker")
 		if err != nil {
@@ -162,17 +174,19 @@ func (u *ImageRepoService) Update(req dto.ImageRepoUpdate) error {
 
 	upMap["status"] = constant.StatusSuccess
 	upMap["message"] = ""
-	if err := u.CheckConn(req.DownloadUrl, req.Username, req.Password); err != nil {
-		upMap["status"] = constant.StatusFailed
-		upMap["message"] = err.Error()
+	if req.Auth {
+		if err := u.CheckConn(req.DownloadUrl, req.Username, req.Password); err != nil {
+			upMap["status"] = constant.StatusFailed
+			upMap["message"] = err.Error()
+		}
 	}
 	return imageRepoRepo.Update(req.ID, upMap)
 }
 
 func (u *ImageRepoService) CheckConn(host, user, password string) error {
-	stdout, err := cmd.Execf("docker login -u %s -p %s %s", user, password, host)
+	stdout, err := cmd.ExecWithCheck("docker", "login", "-u", user, "-p", password, host)
 	if err != nil {
-		return errors.New(string(stdout))
+		return fmt.Errorf("stdout: %s, stderr: %v", stdout, err)
 	}
 	if strings.Contains(string(stdout), "Login Succeeded") {
 		return nil
@@ -188,27 +202,27 @@ func (u *ImageRepoService) handleRegistries(newHost, delHost, handle string) err
 		_, _ = os.Create(constant.DaemonJsonPath)
 	}
 
-	deamonMap := make(map[string]interface{})
+	daemonMap := make(map[string]interface{})
 	file, err := os.ReadFile(constant.DaemonJsonPath)
 	if err != nil {
 		return err
 	}
-	if err := json.Unmarshal(file, &deamonMap); err != nil {
+	if err := json.Unmarshal(file, &daemonMap); err != nil {
 		return err
 	}
 
-	iRegistries := deamonMap["insecure-registries"]
+	iRegistries := daemonMap["insecure-registries"]
 	registries, _ := iRegistries.([]interface{})
 	switch handle {
 	case "create":
 		registries = common.RemoveRepeatElement(append(registries, newHost))
 	case "update":
-		registries = common.RemoveRepeatElement(append(registries, newHost))
 		for i, regi := range registries {
 			if regi == delHost {
 				registries = append(registries[:i], registries[i+1:]...)
 			}
 		}
+		registries = common.RemoveRepeatElement(append(registries, newHost))
 	case "delete":
 		for i, regi := range registries {
 			if regi == delHost {
@@ -217,11 +231,11 @@ func (u *ImageRepoService) handleRegistries(newHost, delHost, handle string) err
 		}
 	}
 	if len(registries) == 0 {
-		delete(deamonMap, "insecure-registries")
+		delete(daemonMap, "insecure-registries")
 	} else {
-		deamonMap["insecure-registries"] = registries
+		daemonMap["insecure-registries"] = registries
 	}
-	newJson, err := json.MarshalIndent(deamonMap, "", "\t")
+	newJson, err := json.MarshalIndent(daemonMap, "", "\t")
 	if err != nil {
 		return err
 	}

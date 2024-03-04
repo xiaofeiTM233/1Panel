@@ -2,13 +2,14 @@ package cmd
 
 import (
 	"fmt"
+	"os/user"
 	"strings"
 	"time"
 
 	"github.com/1Panel-dev/1Panel/backend/server"
 	cmdUtils "github.com/1Panel-dev/1Panel/backend/utils/cmd"
+	"github.com/glebarez/sqlite"
 	"github.com/spf13/cobra"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
@@ -60,4 +61,12 @@ func getSettingByKey(db *gorm.DB, key string) string {
 
 func setSettingByKey(db *gorm.DB, key, value string) error {
 	return db.Model(&setting{}).Where("key = ?", key).Updates(map[string]interface{}{"value": value}).Error
+}
+
+func isRoot() bool {
+	currentUser, err := user.Current()
+	if err != nil {
+		return false
+	}
+	return currentUser.Uid == "0"
 }

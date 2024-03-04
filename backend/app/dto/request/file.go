@@ -9,6 +9,10 @@ type FileOption struct {
 	files.FileOption
 }
 
+type FileContentReq struct {
+	Path string `json:"path" validate:"required"`
+}
+
 type SearchUploadWithPage struct {
 	dto.PageInfo
 	Path string `json:"path" validate:"required"`
@@ -25,9 +29,18 @@ type FileCreate struct {
 	Sub       bool   `json:"sub"`
 }
 
+type FileRoleReq struct {
+	Paths []string `json:"paths" validate:"required"`
+	Mode  int64    `json:"mode" validate:"required"`
+	User  string   `json:"user" validate:"required"`
+	Group string   `json:"group" validate:"required"`
+	Sub   bool     `json:"sub"`
+}
+
 type FileDelete struct {
-	Path  string `json:"path" validate:"required"`
-	IsDir bool   `json:"isDir"`
+	Path        string `json:"path" validate:"required"`
+	IsDir       bool   `json:"isDir"`
+	ForceDelete bool   `json:"forceDelete"`
 }
 
 type FileBatchDelete struct {
@@ -51,7 +64,7 @@ type FileDeCompress struct {
 
 type FileEdit struct {
 	Path    string `json:"path"  validate:"required"`
-	Content string `json:"content"  validate:"required"`
+	Content string `json:"content"`
 }
 
 type FileRename struct {
@@ -64,22 +77,30 @@ type FilePathCheck struct {
 }
 
 type FileWget struct {
-	Url  string `json:"url" validate:"required"`
-	Path string `json:"path" validate:"required"`
-	Name string `json:"name" validate:"required"`
+	Url               string `json:"url" validate:"required"`
+	Path              string `json:"path" validate:"required"`
+	Name              string `json:"name" validate:"required"`
+	IgnoreCertificate bool   `json:"ignoreCertificate"`
 }
 
 type FileMove struct {
 	Type     string   `json:"type" validate:"required"`
 	OldPaths []string `json:"oldPaths" validate:"required"`
 	NewPath  string   `json:"newPath" validate:"required"`
+	Name     string   `json:"name"`
+	Cover    bool     `json:"cover"`
 }
 
 type FileDownload struct {
 	Paths    []string `json:"paths" validate:"required"`
 	Type     string   `json:"type" validate:"required"`
 	Name     string   `json:"name" validate:"required"`
-	Compress bool     `json:"compress" validate:"required"`
+	Compress bool     `json:"compress"`
+}
+
+type FileChunkDownload struct {
+	Path string `json:"path" validate:"required"`
+	Name string `json:"name" validate:"required"`
 }
 
 type DirSizeReq struct {
@@ -94,5 +115,18 @@ type FileRoleUpdate struct {
 	Path  string `json:"path" validate:"required"`
 	User  string `json:"user" validate:"required"`
 	Group string `json:"group" validate:"required"`
-	Sub   bool   `json:"sub" validate:"required"`
+	Sub   bool   `json:"sub"`
+}
+
+type FileReadByLineReq struct {
+	Page     int    `json:"page" validate:"required"`
+	PageSize int    `json:"pageSize" validate:"required"`
+	Type     string `json:"type" validate:"required"`
+	ID       uint   `json:"ID"`
+	Name     string `json:"name"`
+}
+
+type FileExistReq struct {
+	Name string `json:"name" validate:"required"`
+	Dir  string `json:"dir" validate:"required"`
 }

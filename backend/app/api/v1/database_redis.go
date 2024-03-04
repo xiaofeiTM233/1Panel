@@ -1,16 +1,11 @@
 package v1
 
 import (
-	"bufio"
 	"encoding/base64"
-	"fmt"
-	"os"
 
 	"github.com/1Panel-dev/1Panel/backend/app/api/v1/helper"
 	"github.com/1Panel-dev/1Panel/backend/app/dto"
 	"github.com/1Panel-dev/1Panel/backend/constant"
-	"github.com/1Panel-dev/1Panel/backend/global"
-	"github.com/1Panel-dev/1Panel/backend/utils/compose"
 	"github.com/gin-gonic/gin"
 )
 
@@ -70,17 +65,13 @@ func (b *BaseApi) LoadPersistenceConf(c *gin.Context) {
 // @Success 200
 // @Security ApiKeyAuth
 // @Router /databases/redis/conf/update [post]
-// @x-panel-log {"bodyKeys":[],"paramKeys":[],"BeforeFuntions":[],"formatZH":"更新 redis 数据库配置信息","formatEN":"update the redis database configuration information"}
+// @x-panel-log {"bodyKeys":[],"paramKeys":[],"BeforeFunctions":[],"formatZH":"更新 redis 数据库配置信息","formatEN":"update the redis database configuration information"}
 func (b *BaseApi) UpdateRedisConf(c *gin.Context) {
 	var req dto.RedisConfUpdate
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+	if err := helper.CheckBind(&req, c); err != nil {
 		return
 	}
-	if err := global.VALID.Struct(req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
-		return
-	}
+
 	if err := redisService.UpdateConf(req); err != nil {
 		helper.ErrorWithDetail(c, constant.CodeErrInternalServer, constant.ErrTypeInternalServer, err)
 		return
@@ -92,21 +83,17 @@ func (b *BaseApi) UpdateRedisConf(c *gin.Context) {
 // @Summary Change redis password
 // @Description 更新 redis 密码
 // @Accept json
-// @Param request body dto.ChangeDBInfo true "request"
+// @Param request body dto.ChangeRedisPass true "request"
 // @Success 200
 // @Security ApiKeyAuth
 // @Router /databases/redis/password [post]
-// @x-panel-log {"bodyKeys":[],"paramKeys":[],"BeforeFuntions":[],"formatZH":"修改 redis 数据库密码","formatEN":"change the password of the redis database"}
+// @x-panel-log {"bodyKeys":[],"paramKeys":[],"BeforeFunctions":[],"formatZH":"修改 redis 数据库密码","formatEN":"change the password of the redis database"}
 func (b *BaseApi) ChangeRedisPassword(c *gin.Context) {
-	var req dto.ChangeDBInfo
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+	var req dto.ChangeRedisPass
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
 		return
 	}
-	if err := global.VALID.Struct(req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
-		return
-	}
+
 	if len(req.Value) != 0 {
 		value, err := base64.StdEncoding.DecodeString(req.Value)
 		if err != nil {
@@ -131,17 +118,13 @@ func (b *BaseApi) ChangeRedisPassword(c *gin.Context) {
 // @Success 200
 // @Security ApiKeyAuth
 // @Router /databases/redis/persistence/update [post]
-// @x-panel-log {"bodyKeys":[],"paramKeys":[],"BeforeFuntions":[],"formatZH":"redis 数据库持久化配置更新","formatEN":"redis database persistence configuration update"}
+// @x-panel-log {"bodyKeys":[],"paramKeys":[],"BeforeFunctions":[],"formatZH":"redis 数据库持久化配置更新","formatEN":"redis database persistence configuration update"}
 func (b *BaseApi) UpdateRedisPersistenceConf(c *gin.Context) {
 	var req dto.RedisConfPersistenceUpdate
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
 		return
 	}
-	if err := global.VALID.Struct(req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
-		return
-	}
+
 	if err := redisService.UpdatePersistenceConf(req); err != nil {
 		helper.ErrorWithDetail(c, constant.CodeErrInternalServer, constant.ErrTypeInternalServer, err)
 		return
@@ -159,8 +142,7 @@ func (b *BaseApi) UpdateRedisPersistenceConf(c *gin.Context) {
 // @Router /databases/redis/backup/search [post]
 func (b *BaseApi) RedisBackupList(c *gin.Context) {
 	var req dto.PageInfo
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
 		return
 	}
 
@@ -174,46 +156,4 @@ func (b *BaseApi) RedisBackupList(c *gin.Context) {
 		Items: list,
 		Total: total,
 	})
-}
-
-// @Tags Database Redis
-// @Summary Update redis conf by file
-// @Description 上传更新 redis 配置信息
-// @Accept json
-// @Param request body dto.RedisConfUpdateByFile true "request"
-// @Success 200
-// @Security ApiKeyAuth
-// @Router /databases/redis/conffile/update [post]
-// @x-panel-log {"bodyKeys":[],"paramKeys":[],"BeforeFuntions":[],"formatZH":"更新 redis 数据库配置信息","formatEN":"update the redis database configuration information"}
-func (b *BaseApi) UpdateRedisConfByFile(c *gin.Context) {
-	var req dto.RedisConfUpdateByFile
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
-		return
-	}
-	redisInfo, err := redisService.LoadConf()
-	if err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrInternalServer, constant.ErrTypeInternalServer, err)
-		return
-	}
-	path := fmt.Sprintf("%s/redis/%s/conf/redis.conf", constant.AppInstallDir, redisInfo.Name)
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_TRUNC, 0640)
-	if err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrInternalServer, constant.ErrTypeInternalServer, err)
-		return
-	}
-	defer file.Close()
-	write := bufio.NewWriter(file)
-	_, _ = write.WriteString(req.File)
-	write.Flush()
-
-	if req.RestartNow {
-		composeDir := fmt.Sprintf("%s/redis/%s/docker-compose.yml", constant.AppInstallDir, redisInfo.Name)
-		if _, err := compose.Restart(composeDir); err != nil {
-			helper.ErrorWithDetail(c, constant.CodeErrInternalServer, constant.ErrTypeInternalServer, err)
-			return
-		}
-	}
-
-	helper.SuccessWithData(c, nil)
 }

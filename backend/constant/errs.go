@@ -42,13 +42,13 @@ var (
 	ErrTypePasswordExpired = "ErrPasswordExpired"
 	ErrNameIsExist         = "ErrNameIsExist"
 	ErrDemoEnvironment     = "ErrDemoEnvironment"
+	ErrCmdIllegal          = "ErrCmdIllegal"
 )
 
 // app
 var (
 	ErrPortInUsed          = "ErrPortInUsed"
 	ErrAppLimit            = "ErrAppLimit"
-	ErrFileToLarge         = "ErrFileToLarge"
 	ErrFileCanNotRead      = "ErrFileCanNotRead"
 	ErrNotInstall          = "ErrNotInstall"
 	ErrPortInOtherApp      = "ErrPortInOtherApp"
@@ -58,6 +58,11 @@ var (
 	ErrCmdTimeout          = "ErrCmdTimeout"
 	ErrFileParse           = "ErrFileParse"
 	ErrInstallDirNotFound  = "ErrInstallDirNotFound"
+	ErrContainerName       = "ErrContainerName"
+	ErrAppNameExist        = "ErrAppNameExist"
+	ErrFileNotFound        = "ErrFileNotFound"
+	ErrFileParseApp        = "ErrFileParseApp"
+	ErrAppParamKey         = "ErrAppParamKey"
 )
 
 // website
@@ -67,14 +72,18 @@ var (
 	ErrGroupIsUsed        = "ErrGroupIsUsed"
 	ErrUsernameIsExist    = "ErrUsernameIsExist"
 	ErrUsernameIsNotExist = "ErrUsernameIsNotExist"
+	ErrBackupMatch        = "ErrBackupMatch"
+	ErrBackupExist        = "ErrBackupExist"
+	ErrDomainIsUsed       = "ErrDomainIsUsed"
 )
 
 // ssl
 var (
-	ErrSSLCannotDelete     = "ErrSSLCannotDelete"
-	ErrAccountCannotDelete = "ErrAccountCannotDelete"
-	ErrSSLApply            = "ErrSSLApply"
-	ErrEmailIsExist        = "ErrEmailIsExist"
+	ErrSSLCannotDelete               = "ErrSSLCannotDelete"
+	ErrAccountCannotDelete           = "ErrAccountCannotDelete"
+	ErrSSLApply                      = "ErrSSLApply"
+	ErrEmailIsExist                  = "ErrEmailIsExist"
+	ErrEabKidOrEabHmacKeyCannotBlank = "ErrEabKidOrEabHmacKeyCannotBlank"
 )
 
 // file
@@ -84,6 +93,9 @@ var (
 	ErrLinkPathNotFound = "ErrLinkPathNotFound"
 	ErrFileIsExit       = "ErrFileIsExit"
 	ErrFileUpload       = "ErrFileUpload"
+	ErrFileDownloadDir  = "ErrFileDownloadDir"
+	ErrCmdNotFound      = "ErrCmdNotFound"
+	ErrFavoriteExist    = "ErrFavoriteExist"
 )
 
 // mysql
@@ -91,6 +103,8 @@ var (
 	ErrUserIsExist     = "ErrUserIsExist"
 	ErrDatabaseIsExist = "ErrDatabaseIsExist"
 	ErrExecTimeOut     = "ErrExecTimeOut"
+	ErrRemoteExist     = "ErrRemoteExist"
+	ErrLocalExist      = "ErrLocalExist"
 )
 
 // redis
@@ -103,17 +117,36 @@ var (
 	ErrInUsed       = "ErrInUsed"
 	ErrObjectInUsed = "ErrObjectInUsed"
 	ErrPortRules    = "ErrPortRules"
+	ErrPgImagePull  = "ErrPgImagePull"
 )
 
 // runtime
 var (
-	ErrDirNotFound    = "ErrDirNotFound"
-	ErrFileNotExist   = "ErrFileNotExist"
-	ErrImageBuildErr  = "ErrImageBuildErr"
-	ErrImageExist     = "ErrImageExist"
-	ErrDelWithWebsite = "ErrDelWithWebsite"
+	ErrDirNotFound         = "ErrDirNotFound"
+	ErrFileNotExist        = "ErrFileNotExist"
+	ErrImageBuildErr       = "ErrImageBuildErr"
+	ErrImageExist          = "ErrImageExist"
+	ErrDelWithWebsite      = "ErrDelWithWebsite"
+	ErrRuntimeStart        = "ErrRuntimeStart"
+	ErrPackageJsonNotFound = "ErrPackageJsonNotFound"
+	ErrScriptsNotFound     = "ErrScriptsNotFound"
 )
 
 var (
 	ErrBackupInUsed = "ErrBackupInUsed"
+	ErrOSSConn      = "ErrOSSConn"
+	ErrEntrance     = "ErrEntrance"
+)
+
+var (
+	ErrFirewall = "ErrFirewall"
+)
+
+// cronjob
+var (
+	ErrBashExecute = "ErrBashExecute"
+)
+
+var (
+	ErrNotExistUser = "ErrNotExistUser"
 )

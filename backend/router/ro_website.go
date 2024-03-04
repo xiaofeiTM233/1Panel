@@ -9,7 +9,7 @@ import (
 type WebsiteRouter struct {
 }
 
-func (a *WebsiteRouter) InitWebsiteRouter(Router *gin.RouterGroup) {
+func (a *WebsiteRouter) InitRouter(Router *gin.RouterGroup) {
 	groupRouter := Router.Group("websites")
 	groupRouter.Use(middleware.JwtAuth()).Use(middleware.SessionAuth()).Use(middleware.PasswordExpired())
 
@@ -41,16 +41,19 @@ func (a *WebsiteRouter) InitWebsiteRouter(Router *gin.RouterGroup) {
 
 		groupRouter.POST("/waf/config", baseApi.GetWebsiteWafConfig)
 		groupRouter.POST("/waf/update", baseApi.UpdateWebsiteWafConfig)
+		groupRouter.POST("/waf/file/update", baseApi.UpdateWebsiteWafFile)
 
 		groupRouter.GET("/php/config/:id", baseApi.GetWebsitePHPConfig)
 		groupRouter.POST("/php/config", baseApi.UpdateWebsitePHPConfig)
 		groupRouter.POST("/php/update", baseApi.UpdatePHPFile)
+		groupRouter.POST("/php/version", baseApi.ChangePHPVersion)
 
 		groupRouter.POST("/rewrite", baseApi.GetRewriteConfig)
 		groupRouter.POST("/rewrite/update", baseApi.UpdateRewriteConfig)
 
 		groupRouter.POST("/dir/update", baseApi.UpdateSiteDir)
 		groupRouter.POST("/dir/permission", baseApi.UpdateSiteDirPermission)
+		groupRouter.POST("/dir", baseApi.GetDirConfig)
 
 		groupRouter.POST("/proxies", baseApi.GetProxyConfig)
 		groupRouter.POST("/proxies/update", baseApi.UpdateProxyConfig)
@@ -58,5 +61,12 @@ func (a *WebsiteRouter) InitWebsiteRouter(Router *gin.RouterGroup) {
 
 		groupRouter.POST("/auths", baseApi.GetAuthConfig)
 		groupRouter.POST("/auths/update", baseApi.UpdateAuthConfig)
+
+		groupRouter.POST("/leech", baseApi.GetAntiLeech)
+		groupRouter.POST("/leech/update", baseApi.UpdateAntiLeech)
+
+		groupRouter.POST("/redirect/update", baseApi.UpdateRedirectConfig)
+		groupRouter.POST("/redirect", baseApi.GetRedirectConfig)
+		groupRouter.POST("/redirect/file", baseApi.UpdateRedirectConfigFile)
 	}
 }

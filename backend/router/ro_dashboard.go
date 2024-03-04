@@ -9,7 +9,7 @@ import (
 
 type DashboardRouter struct{}
 
-func (s *CronjobRouter) InitDashboardRouter(Router *gin.RouterGroup) {
+func (s *DashboardRouter) InitRouter(Router *gin.RouterGroup) {
 	cmdRouter := Router.Group("dashboard").
 		Use(middleware.JwtAuth()).
 		Use(middleware.SessionAuth()).
@@ -18,5 +18,6 @@ func (s *CronjobRouter) InitDashboardRouter(Router *gin.RouterGroup) {
 	{
 		cmdRouter.GET("/base/:ioOption/:netOption", baseApi.LoadDashboardBaseInfo)
 		cmdRouter.GET("/current/:ioOption/:netOption", baseApi.LoadDashboardCurrentInfo)
+		cmdRouter.POST("/system/restart/:operation", baseApi.SystemRestart)
 	}
 }

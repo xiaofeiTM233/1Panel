@@ -2,6 +2,7 @@ import http from '@/api';
 import { ReqPage, ResPage } from '../interface';
 import { Website } from '../interface/website';
 import { File } from '../interface/file';
+import { TimeoutEnum } from '@/enums/http-enum';
 
 export const SearchWebsites = (req: Website.WebSiteSearch) => {
     return http.post<ResPage<Website.WebsiteDTO>>(`/websites/search`, req);
@@ -84,7 +85,7 @@ export const SearchAcmeAccount = (req: ReqPage) => {
 };
 
 export const CreateAcmeAccount = (req: Website.AcmeAccountCreate) => {
-    return http.post<Website.AcmeAccount>(`/websites/acme`, req);
+    return http.post<Website.AcmeAccount>(`/websites/acme`, req, TimeoutEnum.T_10M);
 };
 
 export const DeleteAcmeAccount = (req: Website.DelReq) => {
@@ -92,15 +93,15 @@ export const DeleteAcmeAccount = (req: Website.DelReq) => {
 };
 
 export const SearchSSL = (req: ReqPage) => {
-    return http.post<ResPage<Website.SSL>>(`/websites/ssl/search`, req);
+    return http.post<ResPage<Website.SSLDTO>>(`/websites/ssl/search`, req);
 };
 
 export const ListSSL = (req: Website.SSLReq) => {
-    return http.post<Website.SSL[]>(`/websites/ssl/search`, req);
+    return http.post<Website.SSLDTO[]>(`/websites/ssl/search`, req);
 };
 
 export const CreateSSL = (req: Website.SSLCreate) => {
-    return http.post<Website.SSLCreate>(`/websites/ssl`, req, 60000);
+    return http.post<Website.SSLCreate>(`/websites/ssl`, req, TimeoutEnum.T_10M);
 };
 
 export const DeleteSSL = (req: Website.DelReq) => {
@@ -119,8 +120,8 @@ export const ApplySSL = (req: Website.SSLApply) => {
     return http.post<Website.SSLApply>(`/websites/ssl/apply`, req);
 };
 
-export const RenewSSL = (req: Website.SSLRenew) => {
-    return http.post<any>(`/websites/ssl/renew`, req);
+export const ObtainSSL = (req: Website.SSLObtain) => {
+    return http.post<any>(`/websites/ssl/obtain`, req);
 };
 
 export const UpdateSSL = (req: Website.SSLUpdate) => {
@@ -128,7 +129,7 @@ export const UpdateSSL = (req: Website.SSLUpdate) => {
 };
 
 export const GetDnsResolve = (req: Website.DNSResolveReq) => {
-    return http.post<Website.DNSResolve[]>(`/websites/ssl/resolve`, req, 60000);
+    return http.post<Website.DNSResolve[]>(`/websites/ssl/resolve`, req, TimeoutEnum.T_5M);
 };
 
 export const GetHTTPSConfig = (id: number) => {
@@ -149,6 +150,10 @@ export const GetWafConfig = (req: Website.WafReq) => {
 
 export const UpdateWafEnable = (req: Website.WafUpdate) => {
     return http.post<any>(`/websites/waf/update`, req);
+};
+
+export const UpdateWafFile = (req: Website.WafFileUpdate) => {
+    return http.post<any>(`/websites/waf/file/update`, req);
 };
 
 export const UpdateNginxFile = (req: Website.NginxUpdate) => {
@@ -205,4 +210,67 @@ export const GetAuthConfig = (req: Website.AuthReq) => {
 
 export const OperateAuthConfig = (req: Website.NginxAuthConfig) => {
     return http.post<any>(`/websites/auths/update`, req);
+};
+
+export const GetAntiLeech = (req: Website.LeechReq) => {
+    return http.post<Website.LeechConfig>(`/websites/leech`, req);
+};
+
+export const UpdateAntiLeech = (req: Website.LeechConfig) => {
+    return http.post<any>(`/websites/leech/update`, req);
+};
+
+export const GetRedirectConfig = (req: Website.WebsiteReq) => {
+    return http.post<Website.RedirectConfig[]>(`/websites/redirect`, req);
+};
+
+export const OperateRedirectConfig = (req: Website.WebsiteReq) => {
+    return http.post<any>(`/websites/redirect/update`, req);
+};
+
+export const UpdateRedirectConfigFile = (req: Website.RedirectFileUpdate) => {
+    return http.post<any>(`/websites/redirect/file`, req);
+};
+
+export const ChangePHPVersion = (req: Website.PHPVersionChange) => {
+    return http.post<any>(`/websites/php/version`, req);
+};
+
+export const GetDirConfig = (req: Website.ProxyReq) => {
+    return http.post<Website.DirConfig>(`/websites/dir`, req);
+};
+
+export const UploadSSL = (req: Website.SSLUpload) => {
+    return http.post<any>(`/websites/ssl/upload`, req);
+};
+
+export const SearchCAs = (req: ReqPage) => {
+    return http.post<ResPage<Website.CA>>(`/websites/ca/search`, req);
+};
+
+export const CreateCA = (req: Website.CACreate) => {
+    return http.post<Website.CA>(`/websites/ca`, req);
+};
+
+export const ObtainSSLByCA = (req: Website.SSLObtainByCA) => {
+    return http.post<any>(`/websites/ca/obtain`, req);
+};
+
+export const DeleteCA = (req: Website.DelReq) => {
+    return http.post<any>(`/websites/ca/del`, req);
+};
+
+export const RenewSSLByCA = (req: Website.RenewSSLByCA) => {
+    return http.post<any>(`/websites/ca/renew`, req);
+};
+
+export const DownloadFile = (params: Website.SSLDownload) => {
+    return http.download<BlobPart>(`/websites/ssl/download`, params, {
+        responseType: 'blob',
+        timeout: TimeoutEnum.T_40S,
+    });
+};
+
+export const GetCA = (id: number) => {
+    return http.get<Website.CADTO>(`/websites/ca/${id}`);
 };

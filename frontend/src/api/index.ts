@@ -1,10 +1,11 @@
-import axios, { AxiosInstance, AxiosError, AxiosRequestConfig, AxiosResponse } from 'axios';
+import axios, { AxiosInstance, AxiosError, AxiosRequestConfig, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 import { ResultData } from '@/api/interface';
 import { ResultEnum } from '@/enums/http-enum';
 import { checkStatus } from './helper/check-status';
 import router from '@/routers';
 import { GlobalStore } from '@/store';
 import { MsgError } from '@/utils/message';
+import { Base64 } from 'js-base64';
 
 const globalStore = GlobalStore();
 
@@ -20,15 +21,18 @@ class RequestHttp {
         this.service = axios.create(config);
         this.service.interceptors.request.use(
             (config: AxiosRequestConfig) => {
-                if (config.method != 'get') {
-                    config.headers = {
-                        'X-CSRF-TOKEN': globalStore.csrfToken,
-                        ...config.headers,
-                    };
+                let language = globalStore.language === 'tw' ? 'zh-Hant' : globalStore.language;
+                config.headers = {
+                    'Accept-Language': language,
+                    ...config.headers,
+                };
+                if (config.url === '/auth/login' || config.url === '/auth/mfalogin') {
+                    let entrance = Base64.encode(globalStore.entrance);
+                    config.headers.EntranceCode = entrance;
                 }
                 return {
                     ...config,
-                };
+                } as InternalAxiosRequestConfig<any>;
             },
             (error: AxiosError) => {
                 return Promise.reject(error);
@@ -48,6 +52,10 @@ class RequestHttp {
                         params: { code: globalStore.entrance },
                     });
                     return Promise.reject(data);
+                }
+                if (data.code == ResultEnum.EXPIRED) {
+                    router.push({ name: 'Expired' });
+                    return data;
                 }
                 if (data.code == ResultEnum.ERRIP) {
                     globalStore.setLogStatus(false);

@@ -12,7 +12,7 @@ import (
 // @Description 获取 OpenResty 配置信息
 // @Success 200 {object} response.FileInfo
 // @Security ApiKeyAuth
-// @Router /openResty [get]
+// @Router /openresty [get]
 func (b *BaseApi) GetNginx(c *gin.Context) {
 	fileInfo, err := nginxService.GetNginxConfig()
 	if err != nil {
@@ -27,13 +27,12 @@ func (b *BaseApi) GetNginx(c *gin.Context) {
 // @Description 获取部分 OpenResty 配置信息
 // @Accept json
 // @Param request body request.NginxScopeReq true "request"
-// @Success 200 {anrry} response.NginxParam
+// @Success 200 {array} response.NginxParam
 // @Security ApiKeyAuth
-// @Router /openResty/scope [post]
+// @Router /openresty/scope [post]
 func (b *BaseApi) GetNginxConfigByScope(c *gin.Context) {
 	var req request.NginxScopeReq
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
 		return
 	}
 
@@ -52,12 +51,11 @@ func (b *BaseApi) GetNginxConfigByScope(c *gin.Context) {
 // @Param request body request.NginxConfigUpdate true "request"
 // @Success 200
 // @Security ApiKeyAuth
-// @Router /openResty/update [post]
-// @x-panel-log {"bodyKeys":["websiteId"],"paramKeys":[],"BeforeFuntions":[{"input_colume":"id","input_value":"websiteId","isList":false,"db":"websites","output_colume":"primary_domain","output_value":"domain"}],"formatZH":"更新 nginx 配置 [domain]","formatEN":"Update nginx conf [domain]"}
+// @Router /openresty/update [post]
+// @x-panel-log {"bodyKeys":["websiteId"],"paramKeys":[],"BeforeFunctions":[{"input_column":"id","input_value":"websiteId","isList":false,"db":"websites","output_column":"primary_domain","output_value":"domain"}],"formatZH":"更新 nginx 配置 [domain]","formatEN":"Update nginx conf [domain]"}
 func (b *BaseApi) UpdateNginxConfigByScope(c *gin.Context) {
 	var req request.NginxConfigUpdate
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
 		return
 	}
 	if err := nginxService.UpdateConfigByScope(req); err != nil {
@@ -72,7 +70,7 @@ func (b *BaseApi) UpdateNginxConfigByScope(c *gin.Context) {
 // @Description 获取 OpenResty 状态信息
 // @Success 200 {object} response.NginxStatus
 // @Security ApiKeyAuth
-// @Router /openResty/status [get]
+// @Router /openresty/status [get]
 func (b *BaseApi) GetNginxStatus(c *gin.Context) {
 	res, err := nginxService.GetStatus()
 	if err != nil {
@@ -89,12 +87,11 @@ func (b *BaseApi) GetNginxStatus(c *gin.Context) {
 // @Param request body request.NginxConfigFileUpdate true "request"
 // @Success 200
 // @Security ApiKeyAuth
-// @Router /openResty/file [post]
-// @x-panel-log {"bodyKeys":[],"paramKeys":[],"BeforeFuntions":[],"formatZH":"更新 nginx 配置","formatEN":"Update nginx conf"}
+// @Router /openresty/file [post]
+// @x-panel-log {"bodyKeys":[],"paramKeys":[],"BeforeFunctions":[],"formatZH":"更新 nginx 配置","formatEN":"Update nginx conf"}
 func (b *BaseApi) UpdateNginxFile(c *gin.Context) {
 	var req request.NginxConfigFileUpdate
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
 		return
 	}
 
@@ -103,4 +100,19 @@ func (b *BaseApi) UpdateNginxFile(c *gin.Context) {
 		return
 	}
 	helper.SuccessWithData(c, nil)
+}
+
+// @Tags OpenResty
+// @Summary Clear OpenResty proxy cache
+// @Description 清理 OpenResty 代理缓存
+// @Success 200
+// @Security ApiKeyAuth
+// @Router /openresty/clear [post]
+// @x-panel-log {"bodyKeys":[],"paramKeys":[],"BeforeFunctions":[],"formatZH":"清理 Openresty 代理缓存","formatEN":"Clear nginx proxy cache"}
+func (b *BaseApi) ClearNginxProxyCache(c *gin.Context) {
+	if err := nginxService.ClearProxyCache(); err != nil {
+		helper.ErrorWithDetail(c, constant.CodeErrInternalServer, constant.ErrTypeInternalServer, err)
+		return
+	}
+	helper.SuccessWithOutData(c)
 }

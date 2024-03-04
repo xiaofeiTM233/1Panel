@@ -30,6 +30,48 @@ func Init() {
 		migrations.UpdateTableAppDetail,
 		migrations.AddBindAndAllowIPs,
 		migrations.UpdateCronjobWithSecond,
+		migrations.UpdateWebsite,
+		migrations.AddBackupAccountDir,
+		migrations.AddMfaInterval,
+		migrations.UpdateAppDetail,
+		migrations.EncryptHostPassword,
+		migrations.AddRemoteDB,
+		migrations.UpdateRedisParam,
+		migrations.UpdateCronjobWithDb,
+		migrations.AddTableFirewall,
+		migrations.AddDatabases,
+		migrations.UpdateDatabase,
+		migrations.UpdateAppInstallResource,
+		migrations.DropDatabaseLocal,
+
+		migrations.AddDefaultNetwork,
+		migrations.UpdateRuntime,
+		migrations.UpdateTag,
+
+		migrations.AddFavorite,
+		migrations.AddBindAddress,
+		migrations.AddCommandGroup,
+		migrations.AddAppSyncStatus,
+
+		migrations.UpdateAcmeAccount,
+		migrations.UpdateWebsiteSSL,
+		migrations.AddWebsiteCA,
+		migrations.AddDockerSockPath,
+		migrations.AddDatabaseSSL,
+		migrations.AddDefaultCA,
+		migrations.AddSettingRecycleBin,
+		migrations.UpdateWebsiteBackupRecord,
+
+		migrations.AddTablePHPExtensions,
+		migrations.AddTableDatabasePostgresql,
+		migrations.AddPostgresqlSuperUser,
+		migrations.UpdateCronjobWithWebsite,
+		migrations.UpdateOneDriveToken,
+		migrations.UpdateCronjobSpec,
+		migrations.UpdateBackupRecordPath,
+		migrations.UpdateSnapshotRecords,
+
+		migrations.UpdateWebDavConf,
 	})
 	if err := m.Migrate(); err != nil {
 		global.LOG.Error(err)

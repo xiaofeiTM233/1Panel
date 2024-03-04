@@ -1,6 +1,6 @@
 <template>
     <div v-loading="loading">
-        <div class="a-card" style="margin-top: 20px">
+        <div class="app-status" style="margin-top: 20px">
             <el-card>
                 <div>
                     <el-tag style="float: left" effect="dark" type="success">Docker</el-tag>
@@ -43,17 +43,30 @@
                 </el-radio-group>
                 <el-row style="margin-top: 20px" v-if="confShowType === 'base'">
                     <el-col :span="1"><br /></el-col>
-                    <el-col :span="10">
-                        <el-form :model="form" label-position="left" :rules="rules" ref="formRef" label-width="150px">
+                    <el-col :xs="24" :sm="24" :md="15" :lg="12" :xl="10">
+                        <el-form :model="form" label-position="left" :rules="rules" ref="formRef" label-width="120px">
                             <el-form-item :label="$t('container.mirrors')" prop="mirrors">
-                                <el-input
-                                    type="textarea"
-                                    :placeholder="$t('container.mirrorHelper')"
-                                    :autosize="{ minRows: 3, maxRows: 10 }"
-                                    v-model="form.mirrors"
-                                />
+                                <div style="width: 100%" v-if="form.mirrors">
+                                    <el-input
+                                        type="textarea"
+                                        :rows="5"
+                                        disabled
+                                        v-model="form.mirrors"
+                                        style="width: calc(100% - 80px)"
+                                    />
+                                    <el-button @click="onChangeMirrors" icon="Setting">
+                                        {{ $t('commons.button.set') }}
+                                    </el-button>
+                                </div>
+                                <el-input disabled v-if="!form.mirrors" v-model="unset">
+                                    <template #append>
+                                        <el-button @click="onChangeMirrors" icon="Setting">
+                                            {{ $t('commons.button.set') }}
+                                        </el-button>
+                                    </template>
+                                </el-input>
                                 <span class="input-help">{{ $t('container.mirrorsHelper') }}</span>
-                                <span class="input-help">
+                                <span class="input-help flx-align-center" style="display: flex">
                                     {{ $t('container.mirrorsHelper2') }}
                                     <el-link
                                         style="font-size: 12px; margin-left: 5px"
@@ -66,59 +79,86 @@
                                 </span>
                             </el-form-item>
                             <el-form-item :label="$t('container.registries')" prop="registries">
-                                <el-input
-                                    type="textarea"
-                                    :placeholder="$t('container.registrieHelper')"
-                                    :autosize="{ minRows: 3, maxRows: 10 }"
-                                    v-model="form.registries"
-                                />
+                                <div style="width: 100%" v-if="form.registries">
+                                    <el-input
+                                        type="textarea"
+                                        :rows="5"
+                                        disabled
+                                        v-model="form.registries"
+                                        style="width: calc(100% - 80px)"
+                                    />
+                                    <el-button @click="onChangeRegistries" icon="Setting">
+                                        {{ $t('commons.button.set') }}
+                                    </el-button>
+                                </div>
+                                <el-input disabled v-if="!form.registries" v-model="unset">
+                                    <template #append>
+                                        <el-button @click="onChangeRegistries" icon="Setting">
+                                            {{ $t('commons.button.set') }}
+                                        </el-button>
+                                    </template>
+                                </el-input>
+                            </el-form-item>
+
+                            <el-form-item label="ipv6" prop="ipv6">
+                                <el-switch v-model="form.ipv6" @change="handleIPv6"></el-switch>
+                                <span class="input-help"></span>
+                                <div v-if="ipv6OptionShow">
+                                    <el-tag>{{ $t('container.subnet') }}: {{ form.fixedCidrV6 }}</el-tag>
+                                    <div>
+                                        <el-button @click="handleIPv6" type="primary" link>
+                                            {{ $t('commons.button.view') }}
+                                        </el-button>
+                                    </div>
+                                </div>
                             </el-form-item>
 
                             <el-form-item :label="$t('container.cutLog')" prop="hasLogOption">
-                                <el-switch v-model="form.logOptionShow"></el-switch>
+                                <el-switch v-model="form.logOptionShow" @change="handleLogOption"></el-switch>
+                                <span class="input-help"></span>
+                                <div v-if="logOptionShow">
+                                    <el-tag>{{ $t('container.maxSize') }}: {{ form.logMaxSize }}</el-tag>
+                                    <el-tag style="margin-left: 5px">
+                                        {{ $t('container.maxFile') }}: {{ form.logMaxFile }}
+                                    </el-tag>
+                                    <div>
+                                        <el-button @click="handleLogOption" type="primary" link>
+                                            {{ $t('commons.button.view') }}
+                                        </el-button>
+                                    </div>
+                                </div>
                             </el-form-item>
-                            <div v-if="form.logOptionShow">
-                                <el-form-item prop="logMaxSize">
-                                    <el-input v-model.number="form.logMaxSize">
-                                        <template #prepend>{{ $t('container.maxSize') }}</template>
-                                        <template #append>
-                                            <el-select v-model="form.sizeUnit" style="width: 70px">
-                                                <el-option label="b" value="b"></el-option>
-                                                <el-option label="k" value="k"></el-option>
-                                                <el-option label="m" value="m"></el-option>
-                                                <el-option label="g" value="g"></el-option>
-                                                <el-option label="t" value="t"></el-option>
-                                            </el-select>
-                                        </template>
-                                    </el-input>
-                                </el-form-item>
-                                <el-form-item prop="logMaxFile">
-                                    <el-input v-model.number="form.logMaxFile">
-                                        <template #prepend>{{ $t('container.maxFile') }}</template>
-                                    </el-input>
-                                </el-form-item>
-                            </div>
 
                             <el-form-item label="iptables" prop="iptables">
-                                <el-switch v-model="form.iptables" @change="onChangeIptables"></el-switch>
+                                <el-switch v-model="form.iptables" @change="handleIptables"></el-switch>
+                                <span class="input-help">{{ $t('container.iptablesHelper1') }}</span>
                             </el-form-item>
                             <el-form-item label="live-restore" prop="liveRestore">
-                                <el-switch :disabled="form.isSwarm" v-model="form.liveRestore"></el-switch>
+                                <el-switch
+                                    :disabled="form.isSwarm"
+                                    v-model="form.liveRestore"
+                                    @change="handleLive"
+                                ></el-switch>
                                 <span class="input-help">{{ $t('container.liveHelper') }}</span>
                                 <span v-if="form.isSwarm" class="input-help">
                                     {{ $t('container.liveWithSwarmHelper') }}
                                 </span>
                             </el-form-item>
                             <el-form-item label="cgroup-driver" prop="cgroupDriver">
-                                <el-radio-group v-model="form.cgroupDriver">
+                                <el-radio-group v-model="form.cgroupDriver" @change="handleCgroup">
                                     <el-radio label="cgroupfs">cgroupfs</el-radio>
                                     <el-radio label="systemd">systemd</el-radio>
                                 </el-radio-group>
                             </el-form-item>
-                            <el-form-item>
-                                <el-button :disabled="loading" type="primary" @click="onSave(formRef)">
-                                    {{ $t('commons.button.save') }}
-                                </el-button>
+                            <el-form-item :label="$t('container.sockPath')" prop="dockerSockPath">
+                                <el-input disabled v-model="form.dockerSockPath">
+                                    <template #append>
+                                        <el-button @click="onChangeSockPath" icon="Setting">
+                                            {{ $t('commons.button.set') }}
+                                        </el-button>
+                                    </template>
+                                </el-input>
+                                <span class="input-help">{{ $t('container.sockPathHelper') }}</span>
                             </el-form-item>
                         </el-form>
                     </el-col>
@@ -146,7 +186,7 @@
         </LayoutContent>
 
         <el-dialog
-            v-model="iptablesVisiable"
+            v-model="iptablesVisible"
             :title="$t('container.iptablesDisable')"
             width="30%"
             :destroy-on-close="true"
@@ -154,21 +194,50 @@
             :close-on-press-escape="false"
             :show-close="false"
         >
-            <span>{{ $t('container.iptablesHelper1') }}</span>
             <div style="margin-top: 10px">
-                <span style="color: red; font-weight: 500">{{ $t('container.iptablesHelper2') }}</span>
+                <span style="color: red">{{ $t('container.iptablesHelper2') }}</span>
+                <div style="margin-top: 10px">
+                    <span style="font-size: 12px">{{ $t('database.restartNowHelper') }}</span>
+                </div>
+                <div style="margin-top: 10px">
+                    <span style="font-size: 12px">{{ $t('commons.msg.operateConfirm') }}</span>
+                    <span style="font-size: 12px; color: red; font-weight: 500">'{{ $t('database.restartNow') }}'</span>
+                </div>
+                <el-input style="margin-top: 10px" v-model="submitInput"></el-input>
             </div>
             <template #footer>
                 <span class="dialog-footer">
-                    <el-button @click="onSaveIptables(true)">{{ $t('commons.button.cancel') }}</el-button>
-                    <el-button type="primary" @click="onSaveIptables(false)">
+                    <el-button
+                        @click="
+                            iptablesVisible = false;
+                            search();
+                        "
+                    >
+                        {{ $t('commons.button.cancel') }}
+                    </el-button>
+                    <el-button
+                        :disabled="submitInput !== $t('database.restartNow')"
+                        type="primary"
+                        @click="onSubmitCloseIPtable"
+                    >
                         {{ $t('commons.button.confirm') }}
                     </el-button>
                 </span>
             </template>
         </el-dialog>
 
-        <ConfirmDialog ref="confirmDialogRef" @confirm="onSubmitSave"></ConfirmDialog>
+        <Mirror ref="mirrorRef" @search="search" />
+        <Registry ref="registriesRef" @search="search" />
+        <LogOption ref="logOptionRef" @search="search" />
+        <Ipv6Option ref="ipv6OptionRef" @search="search" />
+        <SockPath ref="sockPathRef" @search="search" />
+        <ConfirmDialog ref="confirmDialogRefIpv6" @confirm="onSaveIPv6" @cancel="search" />
+        <ConfirmDialog ref="confirmDialogRefIptable" @confirm="onSubmitOpenIPtable" @cancel="search" />
+        <ConfirmDialog ref="confirmDialogRefLog" @confirm="onSubmitSaveLog" @cancel="search" />
+        <ConfirmDialog ref="confirmDialogRefLive" @confirm="onSubmitSaveLive" @cancel="search" />
+        <ConfirmDialog ref="confirmDialogRefCgroup" @confirm="onSubmitSaveCgroup" @cancel="search" />
+
+        <ConfirmDialog ref="confirmDialogRefFile" @confirm="onSubmitSaveFile" @cancel="search" />
     </div>
 </template>
 
@@ -178,6 +247,11 @@ import { onMounted, reactive, ref } from 'vue';
 import { Codemirror } from 'vue-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
 import { oneDark } from '@codemirror/theme-one-dark';
+import Mirror from '@/views/container/setting/mirror/index.vue';
+import Registry from '@/views/container/setting/registry/index.vue';
+import LogOption from '@/views/container/setting/log/index.vue';
+import Ipv6Option from '@/views/container/setting/ipv6/index.vue';
+import SockPath from '@/views/container/setting/sock-path/index.vue';
 import ConfirmDialog from '@/components/confirm-dialog/index.vue';
 import i18n from '@/lang';
 import {
@@ -187,13 +261,30 @@ import {
     updateDaemonJson,
     updateDaemonJsonByfile,
 } from '@/api/modules/container';
+import { getSettingInfo } from '@/api/modules/setting';
 import { MsgSuccess } from '@/utils/message';
 import { checkNumberRange } from '@/global/form-rules';
+
+const unset = ref(i18n.global.t('setting.unSetting'));
+const submitInput = ref();
 
 const loading = ref(false);
 const showDaemonJsonAlert = ref(false);
 const extensions = [javascript(), oneDark];
 const confShowType = ref('base');
+
+const logOptionRef = ref();
+const ipv6OptionRef = ref();
+const confirmDialogRefLog = ref();
+const mirrorRef = ref();
+const registriesRef = ref();
+const confirmDialogRefLive = ref();
+const confirmDialogRefCgroup = ref();
+const confirmDialogRefIptable = ref();
+const confirmDialogRefIpv6 = ref();
+const logOptionShow = ref();
+const ipv6OptionShow = ref();
+const sockPathRef = ref();
 
 const form = reactive({
     isSwarm: false,
@@ -204,57 +295,144 @@ const form = reactive({
     liveRestore: false,
     iptables: true,
     cgroupDriver: '',
+
+    ipv6: false,
+    fixedCidrV6: '',
+    ip6Tables: false,
+    experimental: false,
+
     logOptionShow: false,
-    logMaxSize: 10,
-    sizeUnit: 'm',
+    logMaxSize: '',
     logMaxFile: 3,
+
+    dockerSockPath: '',
 });
 const rules = reactive({
     logMaxSize: [checkNumberRange(1, 1024000)],
     logMaxFile: [checkNumberRange(1, 100)],
 });
-
 const formRef = ref<FormInstance>();
 const dockerConf = ref();
-const confirmDialogRef = ref();
+const confirmDialogRefFile = ref();
 
-const iptablesVisiable = ref();
+const iptablesVisible = ref();
 
-const onSave = async (formEl: FormInstance | undefined) => {
-    if (!formEl) return;
-    formEl.validate(async (valid) => {
-        if (!valid) return;
-        if (!valid) return;
-        let params = {
-            header: i18n.global.t('database.confChange'),
-            operationInfo: i18n.global.t('database.restartNowHelper'),
-            submitInputInfo: i18n.global.t('database.restartNow'),
-        };
-        confirmDialogRef.value!.acceptParams(params);
-    });
-};
 const onSaveFile = async () => {
     let params = {
         header: i18n.global.t('database.confChange'),
         operationInfo: i18n.global.t('database.restartNowHelper'),
         submitInputInfo: i18n.global.t('database.restartNow'),
     };
-    confirmDialogRef.value!.acceptParams(params);
+    confirmDialogRefFile.value!.acceptParams(params);
+};
+
+const onChangeMirrors = () => {
+    mirrorRef.value.acceptParams({ mirrors: form.mirrors });
+};
+const onChangeRegistries = () => {
+    registriesRef.value.acceptParams({ registries: form.registries });
+};
+
+const onChangeSockPath = () => {
+    sockPathRef.value.acceptParams({ dockerSockPath: form.dockerSockPath });
+};
+
+const handleIPv6 = async () => {
+    if (form.ipv6) {
+        ipv6OptionRef.value.acceptParams({
+            fixedCidrV6: form.fixedCidrV6,
+            ip6Tables: form.ip6Tables,
+            experimental: form.experimental,
+        });
+        return;
+    }
+    let params = {
+        header: i18n.global.t('database.confChange'),
+        operationInfo: i18n.global.t('database.restartNowHelper'),
+        submitInputInfo: i18n.global.t('database.restartNow'),
+    };
+    confirmDialogRefIpv6.value!.acceptParams(params);
+};
+const onSaveIPv6 = () => {
+    save('Ipv6', 'disable');
+};
+
+const handleLogOption = async () => {
+    if (form.logOptionShow) {
+        logOptionRef.value.acceptParams({ logMaxSize: form.logMaxSize, logMaxFile: form.logMaxFile });
+        return;
+    }
+    let params = {
+        header: i18n.global.t('database.confChange'),
+        operationInfo: i18n.global.t('database.restartNowHelper'),
+        submitInputInfo: i18n.global.t('database.restartNow'),
+    };
+    confirmDialogRefLog.value!.acceptParams(params);
+};
+const onSubmitSaveLog = async () => {
+    save('LogOption', 'disable');
+};
+
+const handleIptables = () => {
+    if (form.iptables) {
+        let params = {
+            header: i18n.global.t('database.confChange'),
+            operationInfo: i18n.global.t('database.restartNowHelper'),
+            submitInputInfo: i18n.global.t('database.restartNow'),
+        };
+        confirmDialogRefIptable.value!.acceptParams(params);
+        return;
+    } else {
+        iptablesVisible.value = true;
+    }
+};
+const onSubmitCloseIPtable = () => {
+    save('IPtables', 'disable');
+    iptablesVisible.value = false;
+};
+const onSubmitOpenIPtable = () => {
+    save('IPtables', 'enable');
+};
+
+const handleLive = async () => {
+    let params = {
+        header: i18n.global.t('database.confChange'),
+        operationInfo: i18n.global.t('database.restartNowHelper'),
+        submitInputInfo: i18n.global.t('database.restartNow'),
+    };
+    confirmDialogRefLive.value!.acceptParams(params);
+};
+const onSubmitSaveLive = () => {
+    save('LiveRestore', form.liveRestore ? 'enable' : 'disable');
+};
+const handleCgroup = async () => {
+    let params = {
+        header: i18n.global.t('database.confChange'),
+        operationInfo: i18n.global.t('database.restartNowHelper'),
+        submitInputInfo: i18n.global.t('database.restartNow'),
+    };
+    confirmDialogRefCgroup.value!.acceptParams(params);
+};
+const onSubmitSaveCgroup = () => {
+    save('Driver', form.cgroupDriver);
+};
+
+const save = async (key: string, value: string) => {
+    loading.value = true;
+    await updateDaemonJson(key, value)
+        .then(() => {
+            loading.value = false;
+            search();
+            MsgSuccess(i18n.global.t('commons.msg.operationSuccess'));
+        })
+        .catch(() => {
+            search();
+            loading.value = false;
+        });
 };
 
 const toDoc = () => {
-    window.open('https://1panel.cn/docs/user_manual/containers/setting/', '_blank');
-};
-
-const onChangeIptables = () => {
-    if (!form.iptables) {
-        iptablesVisiable.value = true;
-    }
-};
-
-const onSaveIptables = (status: boolean) => {
-    form.iptables = status;
-    iptablesVisiable.value = false;
+    window.open('https://1panel.cn/docs/user_manual/containers/setting/', '_blank', 'noopener,noreferrer');
 };
 
 const onOperator = async (operation: string) => {
@@ -281,53 +459,18 @@ const onOperator = async (operation: string) => {
     });
 };
 
-const onSubmitSave = async () => {
-    if (confShowType.value === 'all') {
-        let param = { file: dockerConf.value };
-        loading.value = true;
-        await updateDaemonJsonByfile(param)
-            .then(() => {
-                loading.value = false;
-                MsgSuccess(i18n.global.t('commons.msg.operationSuccess'));
-            })
-            .catch(() => {
-                loading.value = false;
-            });
-        return;
-    }
-    let itemMirrors = form.mirrors.split('\n');
-    let itemRegistries = form.registries.split('\n');
-    let param = {
-        isSwarm: form.isSwarm,
-        status: form.status,
-        version: '',
-        registryMirrors: itemMirrors.filter(function (el) {
-            return el !== null && el !== '' && el !== undefined;
-        }),
-        insecureRegistries: itemRegistries.filter(function (el) {
-            return el !== null && el !== '' && el !== undefined;
-        }),
-        liveRestore: form.liveRestore,
-        iptables: form.iptables,
-        cgroupDriver: form.cgroupDriver,
-        logMaxSize: form.logMaxSize + form.sizeUnit,
-        logMaxFile: form.logMaxFile + '',
-    };
-    if (!form.logOptionShow) {
-        param.logMaxFile = '';
-        param.logMaxSize = '';
-    }
-
+const onSubmitSaveFile = async () => {
+    let param = { file: dockerConf.value };
     loading.value = true;
-    await updateDaemonJson(param)
+    await updateDaemonJsonByfile(param)
         .then(() => {
             loading.value = false;
-            search();
             MsgSuccess(i18n.global.t('commons.msg.operationSuccess'));
         })
         .catch(() => {
             loading.value = false;
         });
+    return;
 };
 
 const loadDockerConf = async () => {
@@ -349,72 +492,35 @@ const changeMode = async () => {
 };
 
 const search = async () => {
-    loading.value = true;
-    await loadDaemonJson()
-        .then((res) => {
-            loading.value = false;
-            form.isSwarm = res.data.isSwarm;
-            form.status = res.data.status;
-            form.version = res.data.version;
-            form.cgroupDriver = res.data.cgroupDriver;
-            form.liveRestore = res.data.liveRestore;
-            form.iptables = res.data.iptables;
-            form.mirrors = res.data.registryMirrors ? res.data.registryMirrors.join('\n') : '';
-            form.registries = res.data.insecureRegistries ? res.data.insecureRegistries.join('\n') : '';
-            if (res.data.logMaxFile || res.data.logMaxSize) {
-                form.logOptionShow = true;
-            }
-            form.logMaxFile = Number(res.data.logMaxFile);
-            form.logMaxSize = loadSize(res.data.logMaxSize);
-        })
-        .catch(() => {
-            loading.value = false;
-        });
-};
+    const res = await loadDaemonJson();
+    form.isSwarm = res.data.isSwarm;
+    form.status = res.data.status;
+    form.version = res.data.version;
+    form.cgroupDriver = res.data.cgroupDriver || 'cgroupfs';
+    form.liveRestore = res.data.liveRestore;
+    form.iptables = res.data.iptables;
+    form.mirrors = res.data.registryMirrors ? res.data.registryMirrors.join('\n') : '';
+    form.registries = res.data.insecureRegistries ? res.data.insecureRegistries.join('\n') : '';
+    if (res.data.logMaxFile || res.data.logMaxSize) {
+        form.logOptionShow = true;
+        logOptionShow.value = true;
+        form.logMaxFile = Number(res.data.logMaxFile);
+        form.logMaxSize = res.data.logMaxSize;
+    } else {
+        form.logOptionShow = false;
+        logOptionShow.value = false;
+    }
+    form.ipv6 = res.data.ipv6;
+    ipv6OptionShow.value = form.ipv6;
+    form.fixedCidrV6 = res.data.fixedCidrV6;
+    form.ip6Tables = res.data.ip6Tables;
+    form.experimental = res.data.experimental;
 
-const loadSize = (value: string) => {
-    if (value.indexOf('b') !== -1 || value.indexOf('B') !== -1) {
-        form.sizeUnit = 'b';
-        return Number(value.replaceAll('b', '').replaceAll('B', ''));
-    }
-    if (value.indexOf('k') !== -1 || value.indexOf('K') !== -1) {
-        form.sizeUnit = 'k';
-        return Number(value.replaceAll('k', '').replaceAll('K', ''));
-    }
-    if (value.indexOf('m') !== -1 || value.indexOf('M') !== -1) {
-        form.sizeUnit = 'm';
-        return Number(value.replaceAll('m', '').replaceAll('M', ''));
-    }
-    if (value.indexOf('g') !== -1 || value.indexOf('G') !== -1) {
-        form.sizeUnit = 'g';
-        return Number(value.replaceAll('g', '').replaceAll('G', ''));
-    }
-    if (value.indexOf('t') !== -1 || value.indexOf('T') !== -1) {
-        form.sizeUnit = 't';
-        return Number(value.replaceAll('t', '').replaceAll('T', ''));
-    }
+    const settingRes = await getSettingInfo();
+    form.dockerSockPath = settingRes.data.dockerSockPath || 'unix:///var/run/docker-x.sock';
 };
 
 onMounted(() => {
     search();
 });
 </script>
-
-<style lang="scss" scoped>
-.a-card {
-    font-size: 17px;
-    .el-card {
-        --el-card-padding: 12px;
-        .buttons {
-            margin-left: 100px;
-        }
-    }
-}
-.status-content {
-    float: left;
-    margin-left: 50px;
-}
-body {
-    margin: 0;
-}
-</style>

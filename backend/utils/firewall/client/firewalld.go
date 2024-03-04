@@ -3,7 +3,10 @@ package client
 import (
 	"fmt"
 	"strings"
+	"sync"
 
+	"github.com/1Panel-dev/1Panel/backend/buserr"
+	"github.com/1Panel-dev/1Panel/backend/constant"
 	"github.com/1Panel-dev/1Panel/backend/utils/cmd"
 )
 
@@ -49,6 +52,14 @@ func (f *Firewall) Stop() error {
 	return nil
 }
 
+func (f *Firewall) Restart() error {
+	stdout, err := cmd.Exec("systemctl restart firewalld")
+	if err != nil {
+		return fmt.Errorf("restart the firewall failed, err: %s", stdout)
+	}
+	return nil
+}
+
 func (f *Firewall) Reload() error {
 	stdout, err := cmd.Exec("firewall-cmd --reload")
 	if err != nil {
@@ -58,39 +69,49 @@ func (f *Firewall) Reload() error {
 }
 
 func (f *Firewall) ListPort() ([]FireInfo, error) {
-	stdout, err := cmd.Exec("firewall-cmd --zone=public --list-ports")
-	if err != nil {
-		return nil, err
-	}
-	ports := strings.Split(strings.ReplaceAll(stdout, "\n", ""), " ")
+	var wg sync.WaitGroup
 	var datas []FireInfo
-	for _, port := range ports {
-		if len(port) == 0 {
-			continue
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		stdout, err := cmd.Exec("firewall-cmd --zone=public --list-ports")
+		if err != nil {
+			return
 		}
-		var itemPort FireInfo
-		if strings.Contains(port, "/") {
-			itemPort.Port = strings.Split(port, "/")[0]
-			itemPort.Protocol = strings.Split(port, "/")[1]
+		ports := strings.Split(strings.ReplaceAll(stdout, "\n", ""), " ")
+		for _, port := range ports {
+			if len(port) == 0 {
+				continue
+			}
+			var itemPort FireInfo
+			if strings.Contains(port, "/") {
+				itemPort.Port = strings.Split(port, "/")[0]
+				itemPort.Protocol = strings.Split(port, "/")[1]
+			}
+			itemPort.Strategy = "accept"
+			datas = append(datas, itemPort)
 		}
-		itemPort.Strategy = "accept"
-		datas = append(datas, itemPort)
-	}
+	}()
 
-	stdout1, err := cmd.Exec("firewall-cmd --zone=public --list-rich-rules")
-	if err != nil {
-		return nil, err
-	}
-	rules := strings.Split(stdout1, "\n")
-	for _, rule := range rules {
-		if len(rule) == 0 {
-			continue
+	go func() {
+		defer wg.Done()
+		stdout1, err := cmd.Exec("firewall-cmd --zone=public --list-rich-rules")
+		if err != nil {
+			return
 		}
-		itemRule := f.loadInfo(rule)
-		if len(itemRule.Port) != 0 && itemRule.Family == "ipv4" {
-			datas = append(datas, itemRule)
+		rules := strings.Split(stdout1, "\n")
+		for _, rule := range rules {
+			if len(rule) == 0 {
+				continue
+			}
+			itemRule := f.loadInfo(rule)
+			if len(itemRule.Port) != 0 && itemRule.Family == "ipv4" {
+				itemRule.Family = ""
+				datas = append(datas, itemRule)
+			}
 		}
-	}
+	}()
+	wg.Wait()
 	return datas, nil
 }
 
@@ -114,44 +135,41 @@ func (f *Firewall) ListAddress() ([]FireInfo, error) {
 }
 
 func (f *Firewall) Port(port FireInfo, operation string) error {
+	if cmd.CheckIllegal(operation, port.Protocol, port.Port) {
+		return buserr.New(constant.ErrCmdIllegal)
+	}
+
 	stdout, err := cmd.Execf("firewall-cmd --zone=public --%s-port=%s/%s --permanent", operation, port.Port, port.Protocol)
 	if err != nil {
-		return fmt.Errorf("%s port failed, err: %s", operation, stdout)
+		return fmt.Errorf("%s (port: %s/%s strategy: %s) failed, err: %s", operation, port.Port, port.Protocol, port.Strategy, stdout)
 	}
 	return nil
 }
 
 func (f *Firewall) RichRules(rule FireInfo, operation string) error {
-	ruleStr := ""
-	if strings.Contains(rule.Address, "-") {
-		std, err := cmd.Execf("firewall-cmd --permanent --new-ipset=%s --type=hash:ip", rule.Address)
-		if err != nil {
-			return fmt.Errorf("add new ipset failed, err: %s", std)
-		}
-		std2, err := cmd.Execf("firewall-cmd --permanent --ipset=%s --add-entry=%s", rule.Address, rule.Address)
-		if err != nil {
-			return fmt.Errorf("add entry to ipset failed, err: %s", std2)
-		}
-		if err := f.Reload(); err != nil {
-			return err
-		}
-		ruleStr = fmt.Sprintf("rule source ipset=%s %s", rule.Address, rule.Strategy)
-	} else {
-		ruleStr = "rule family=ipv4 "
-		if len(rule.Address) != 0 {
-			ruleStr += fmt.Sprintf("source address=%s ", rule.Address)
-		}
-		if len(rule.Port) != 0 {
-			ruleStr += fmt.Sprintf("port port=%s ", rule.Port)
-		}
-		if len(rule.Protocol) != 0 {
-			ruleStr += fmt.Sprintf("protocol=%s ", rule.Protocol)
-		}
-		ruleStr += rule.Strategy
+	if cmd.CheckIllegal(operation, rule.Address, rule.Protocol, rule.Port, rule.Strategy) {
+		return buserr.New(constant.ErrCmdIllegal)
 	}
+	ruleStr := "rule family=ipv4 "
+	if len(rule.Address) != 0 {
+		ruleStr += fmt.Sprintf("source address=%s ", rule.Address)
+	}
+	if len(rule.Port) != 0 {
+		ruleStr += fmt.Sprintf("port port=%s ", rule.Port)
+	}
+	if len(rule.Protocol) != 0 {
+		ruleStr += fmt.Sprintf("protocol=%s ", rule.Protocol)
+	}
+	ruleStr += rule.Strategy
 	stdout, err := cmd.Execf("firewall-cmd --zone=public --%s-rich-rule '%s' --permanent", operation, ruleStr)
 	if err != nil {
-		return fmt.Errorf("%s rich rules failed, err: %s", operation, stdout)
+		return fmt.Errorf("%s rich rules (%s) failed, err: %s", operation, ruleStr, stdout)
+	}
+	if len(rule.Address) == 0 {
+		stdout1, err := cmd.Execf("firewall-cmd --zone=public --%s-rich-rule '%s' --permanent", operation, strings.ReplaceAll(ruleStr, "family=ipv4 ", "family=ipv6 "))
+		if err != nil {
+			return fmt.Errorf("%s rich rules (%s) failed, err: %s", operation, strings.ReplaceAll(ruleStr, "family=ipv4 ", "family=ipv6 "), stdout1)
+		}
 	}
 	return nil
 }

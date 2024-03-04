@@ -5,12 +5,7 @@
                 <el-switch v-model="enableUpdate.enable" @change="updateEnable"></el-switch>
             </el-form-item>
             <el-form-item :label="$t('website.ext')">
-                <el-input
-                    type="textarea"
-                    :autosize="{ minRows: 4, maxRows: 8 }"
-                    v-model="exts"
-                    :placeholder="$t('website.wafInputHelper')"
-                />
+                <el-input type="textarea" :rows="3" v-model="exts" :placeholder="$t('website.wafInputHelper')" />
             </el-form-item>
             <ComplexTable :data="data" v-loading="loading">
                 <template #toolbar>
@@ -32,9 +27,8 @@
 </template>
 <script lang="ts" setup>
 import { Website } from '@/api/interface/website';
-import { GetWafConfig, UpdateWafEnable } from '@/api/modules/website';
+import { GetWafConfig, UpdateWafEnable, UpdateWafFile } from '@/api/modules/website';
 import { computed, onMounted, reactive, ref } from 'vue';
-import { SaveFileContent } from '@/api/modules/files';
 import i18n from '@/lang';
 import { MsgSuccess } from '@/utils/message';
 
@@ -48,23 +42,24 @@ const id = computed(() => {
     return props.id;
 });
 
-let loading = ref(false);
-let data = ref([]);
-let req = ref<Website.WafReq>({
+const loading = ref(false);
+const data = ref([]);
+const req = ref<Website.WafReq>({
     websiteId: 0,
     key: '$fileExtDeny',
     rule: 'file_ext_block',
 });
-let fileUpdate = reactive({
-    path: '',
+const fileUpdate = reactive({
     content: '',
+    websiteId: 0,
+    type: 'file_ext_block',
 });
-let enableUpdate = ref<Website.WafUpdate>({
+const enableUpdate = ref<Website.WafUpdate>({
     websiteId: 0,
     key: '$fileExtDeny',
     enable: false,
 });
-let exts = ref();
+const exts = ref();
 
 const get = async () => {
     data.value = [];
@@ -81,7 +76,6 @@ const get = async () => {
         });
     }
 
-    fileUpdate.path = res.data.filePath;
     enableUpdate.value.enable = res.data.enable;
 };
 
@@ -109,7 +103,7 @@ const openCreate = () => {
 const submit = async (extArray: string[]) => {
     fileUpdate.content = JSON.stringify(extArray);
     loading.value = true;
-    SaveFileContent(fileUpdate)
+    UpdateWafFile(fileUpdate)
         .then(() => {
             exts.value = '';
             MsgSuccess(i18n.global.t('commons.msg.updateSuccess'));
@@ -134,6 +128,7 @@ const updateEnable = async (enable: boolean) => {
 onMounted(() => {
     req.value.websiteId = id.value;
     enableUpdate.value.websiteId = id.value;
+    fileUpdate.websiteId = id.value;
     get();
 });
 </script>

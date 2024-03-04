@@ -24,11 +24,11 @@ func (u *ContainerService) PageNetwork(req dto.SearchWithPage) (int64, interface
 		return 0, nil, err
 	}
 	if len(req.Info) != 0 {
-		lenth, count := len(list), 0
-		for count < lenth {
+		length, count := len(list), 0
+		for count < length {
 			if !strings.Contains(list[count].Name, req.Info) {
 				list = append(list[:count], list[(count+1):]...)
-				lenth--
+				length--
 			} else {
 				count++
 			}
@@ -75,6 +75,26 @@ func (u *ContainerService) PageNetwork(req dto.SearchWithPage) (int64, interface
 
 	return int64(total), data, nil
 }
+
+func (u *ContainerService) ListNetwork() ([]dto.Options, error) {
+	client, err := docker.NewDockerClient()
+	if err != nil {
+		return nil, err
+	}
+	list, err := client.NetworkList(context.TODO(), types.NetworkListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	var datas []dto.Options
+	for _, item := range list {
+		datas = append(datas, dto.Options{Option: item.Name})
+	}
+	sort.Slice(datas, func(i, j int) bool {
+		return datas[i].Option < datas[j].Option
+	})
+	return datas, nil
+}
+
 func (u *ContainerService) DeleteNetwork(req dto.BatchDelete) error {
 	client, err := docker.NewDockerClient()
 	if err != nil {
@@ -90,35 +110,63 @@ func (u *ContainerService) DeleteNetwork(req dto.BatchDelete) error {
 	}
 	return nil
 }
-func (u *ContainerService) CreateNetwork(req dto.NetworkCreat) error {
+func (u *ContainerService) CreateNetwork(req dto.NetworkCreate) error {
 	client, err := docker.NewDockerClient()
 	if err != nil {
 		return err
 	}
 	var (
-		ipam    network.IPAMConfig
-		hasConf bool
+		ipams    []network.IPAMConfig
+		enableV6 bool
 	)
-	if len(req.Subnet) != 0 {
-		ipam.Subnet = req.Subnet
-		hasConf = true
+	if req.Ipv4 {
+		var itemIpam network.IPAMConfig
+		if len(req.AuxAddress) != 0 {
+			itemIpam.AuxAddress = make(map[string]string)
+		}
+		if len(req.Subnet) != 0 {
+			itemIpam.Subnet = req.Subnet
+		}
+		if len(req.Gateway) != 0 {
+			itemIpam.Gateway = req.Gateway
+		}
+		if len(req.IPRange) != 0 {
+			itemIpam.IPRange = req.IPRange
+		}
+		for _, addr := range req.AuxAddress {
+			itemIpam.AuxAddress[addr.Key] = addr.Value
+		}
+		ipams = append(ipams, itemIpam)
 	}
-	if len(req.Gateway) != 0 {
-		ipam.Gateway = req.Gateway
-		hasConf = true
-	}
-	if len(req.IPRange) != 0 {
-		ipam.IPRange = req.IPRange
-		hasConf = true
+	if req.Ipv6 {
+		enableV6 = true
+		var itemIpam network.IPAMConfig
+		if len(req.AuxAddress) != 0 {
+			itemIpam.AuxAddress = make(map[string]string)
+		}
+		if len(req.SubnetV6) != 0 {
+			itemIpam.Subnet = req.SubnetV6
+		}
+		if len(req.GatewayV6) != 0 {
+			itemIpam.Gateway = req.GatewayV6
+		}
+		if len(req.IPRangeV6) != 0 {
+			itemIpam.IPRange = req.IPRangeV6
+		}
+		for _, addr := range req.AuxAddressV6 {
+			itemIpam.AuxAddress[addr.Key] = addr.Value
+		}
+		ipams = append(ipams, itemIpam)
 	}
 
 	options := types.NetworkCreate{
-		Driver:  req.Driver,
-		Options: stringsToMap(req.Options),
-		Labels:  stringsToMap(req.Labels),
+		EnableIPv6: enableV6,
+		Driver:     req.Driver,
+		Options:    stringsToMap(req.Options),
+		Labels:     stringsToMap(req.Labels),
 	}
-	if hasConf {
-		options.IPAM = &network.IPAM{Config: []network.IPAMConfig{ipam}}
+	if len(ipams) != 0 {
+		options.IPAM = &network.IPAM{Config: ipams}
 	}
 	if _, err := client.NetworkCreate(context.TODO(), req.Name, options); err != nil {
 		return err

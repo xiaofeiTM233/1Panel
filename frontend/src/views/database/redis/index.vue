@@ -36,7 +36,7 @@
         <Setting ref="settingRef" style="margin-top: 30px" />
         <Password ref="passwordRef" @check-exist="initTerminal" @close-terminal="closeTerminal(true)" />
         <el-dialog
-            v-model="commandVisiable"
+            v-model="commandVisible"
             :title="$t('app.checkTitle')"
             width="30%"
             :close-on-click-modal="false"
@@ -49,10 +49,12 @@
             </el-alert>
             <template #footer>
                 <span class="dialog-footer">
-                    <el-button @click="commandVisiable = false">{{ $t('commons.button.cancel') }}</el-button>
+                    <el-button @click="commandVisible = false">{{ $t('commons.button.cancel') }}</el-button>
                 </span>
             </template>
         </el-dialog>
+
+        <PortJumpDialog ref="dialogPortJumpRef" />
     </div>
 </template>
 
@@ -61,6 +63,7 @@ import Setting from '@/views/database/redis/setting/index.vue';
 import Password from '@/views/database/redis/password/index.vue';
 import Terminal from '@/components/terminal/index.vue';
 import AppStatus from '@/components/app-status/index.vue';
+import PortJumpDialog from '@/components/port-jump/index.vue';
 import { nextTick, onBeforeUnmount, ref } from 'vue';
 import { App } from '@/api/interface/app';
 import { GetAppPort } from '@/api/modules/app';
@@ -78,7 +81,9 @@ const redisName = ref();
 const terminalShow = ref(false);
 
 const redisCommandPort = ref();
-const commandVisiable = ref(false);
+const commandVisible = ref(false);
+
+const dialogPortJumpRef = ref();
 
 const isRefresh = ref();
 
@@ -91,19 +96,17 @@ const onSetting = async () => {
 
 const goDashboard = async () => {
     if (redisCommandPort.value === 0) {
-        commandVisiable.value = true;
+        commandVisible.value = true;
         return;
     }
-    let href = window.location.href;
-    let ipLocal = href.split('//')[1].split(':')[0];
-    window.open(`http://${ipLocal}:${redisCommandPort.value}`, '_blank');
+    dialogPortJumpRef.value.acceptParams({ port: redisCommandPort.value });
 };
 const getAppDetail = (key: string) => {
-    router.push({ name: 'AppDetail', params: { appKey: key } });
+    router.push({ name: 'AppAll', query: { install: key } });
 };
 
 const loadDashboardPort = async () => {
-    const res = await GetAppPort('redis-commander');
+    const res = await GetAppPort('redis-commander', '');
     redisCommandPort.value = res.data;
 };
 
@@ -125,6 +128,7 @@ const checkExist = (data: App.CheckInstalled) => {
                 endpoint: '/api/v1/databases/redis/exec',
                 args: '',
                 error: '',
+                initCmd: '',
             });
         });
     }
@@ -138,6 +142,7 @@ const initTerminal = async () => {
                 endpoint: '/api/v1/databases/redis/exec',
                 args: '',
                 error: '',
+                initCmd: '',
             });
         });
     }

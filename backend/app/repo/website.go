@@ -26,6 +26,7 @@ type IWebsiteRepo interface {
 	SaveWithoutCtx(app *model.Website) error
 	DeleteBy(ctx context.Context, opts ...DBOption) error
 	Create(ctx context.Context, app *model.Website) error
+	DeleteAll(ctx context.Context) error
 }
 
 func NewIWebsiteRepo() IWebsiteRepo {
@@ -94,7 +95,7 @@ func (w *WebsiteRepo) Page(page, size int, opts ...DBOption) (int64, []model.Web
 
 func (w *WebsiteRepo) List(opts ...DBOption) ([]model.Website, error) {
 	var websites []model.Website
-	err := getDb(opts...).Model(&model.Website{}).Preload("WebsiteSSL").Find(&websites).Error
+	err := getDb(opts...).Model(&model.Website{}).Preload("Domains").Preload("WebsiteSSL").Find(&websites).Error
 	return websites, err
 }
 
@@ -130,4 +131,8 @@ func (w *WebsiteRepo) SaveWithoutCtx(website *model.Website) error {
 
 func (w *WebsiteRepo) DeleteBy(ctx context.Context, opts ...DBOption) error {
 	return getTx(ctx, opts...).Delete(&model.Website{}).Error
+}
+
+func (w *WebsiteRepo) DeleteAll(ctx context.Context) error {
+	return getTx(ctx).Where("1 = 1 ").Delete(&model.Website{}).Error
 }

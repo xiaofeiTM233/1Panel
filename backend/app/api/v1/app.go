@@ -19,8 +19,7 @@ import (
 // @Router /apps/search [post]
 func (b *BaseApi) SearchApp(c *gin.Context) {
 	var req request.AppSearch
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
 		return
 	}
 	list, err := appService.PageApp(req)
@@ -37,7 +36,7 @@ func (b *BaseApi) SearchApp(c *gin.Context) {
 // @Success 200
 // @Security ApiKeyAuth
 // @Router /apps/sync [post]
-// @x-panel-log {"bodyKeys":[],"paramKeys":[],"BeforeFuntions":[],"formatZH":"应用商店同步","formatEN":"App store synchronization"}
+// @x-panel-log {"bodyKeys":[],"paramKeys":[],"BeforeFunctions":[],"formatZH":"应用商店同步","formatEN":"App store synchronization"}
 func (b *BaseApi) SyncApp(c *gin.Context) {
 	go appService.SyncAppListFromLocal()
 	res, err := appService.GetAppUpdate()
@@ -45,16 +44,18 @@ func (b *BaseApi) SyncApp(c *gin.Context) {
 		helper.ErrorWithDetail(c, constant.CodeErrInternalServer, constant.ErrTypeInternalServer, err)
 		return
 	}
+
 	if !res.CanUpdate {
-		helper.SuccessWithMsg(c, i18n.GetMsgByKey("AppStoreIsUpToDate"))
+		if res.IsSyncing {
+			helper.SuccessWithMsg(c, i18n.GetMsgByKey("AppStoreIsSyncing"))
+		} else {
+			helper.SuccessWithMsg(c, i18n.GetMsgByKey("AppStoreIsUpToDate"))
+		}
 		return
 	}
 	go func() {
-		global.LOG.Infof("sync app list start ...")
 		if err := appService.SyncAppListFromRemote(); err != nil {
-			global.LOG.Errorf("sync app list error [%s]", err.Error())
-		} else {
-			global.LOG.Infof("sync app list success!")
+			global.LOG.Errorf("Synchronization with the App Store failed [%s]", err.Error())
 		}
 	}()
 	helper.SuccessWithData(c, "")
@@ -93,14 +94,14 @@ func (b *BaseApi) GetApp(c *gin.Context) {
 // @Security ApiKeyAuth
 // @Router /apps/detail/:appId/:version/:type [get]
 func (b *BaseApi) GetAppDetail(c *gin.Context) {
-	appId, err := helper.GetIntParamByKey(c, "appId")
+	appID, err := helper.GetIntParamByKey(c, "appId")
 	if err != nil {
 		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInternalServer, nil)
 		return
 	}
 	version := c.Param("version")
 	appType := c.Param("type")
-	appDetailDTO, err := appService.GetAppDetail(appId, version, appType)
+	appDetailDTO, err := appService.GetAppDetail(appID, version, appType)
 	if err != nil {
 		helper.ErrorWithDetail(c, constant.CodeErrInternalServer, constant.ErrTypeInternalServer, err)
 		return
@@ -131,6 +132,22 @@ func (b *BaseApi) GetAppDetailByID(c *gin.Context) {
 }
 
 // @Tags App
+// @Summary Get Ignore App
+// @Description 获取忽略的应用版本
+// @Accept json
+// @Success 200 {object} response.IgnoredApp
+// @Security ApiKeyAuth
+// @Router /apps/ingored [get]
+func (b *BaseApi) GetIgnoredApp(c *gin.Context) {
+	res, err := appService.GetIgnoredApp()
+	if err != nil {
+		helper.ErrorWithDetail(c, constant.CodeErrInternalServer, constant.ErrTypeInternalServer, err)
+		return
+	}
+	helper.SuccessWithData(c, res)
+}
+
+// @Tags App
 // @Summary Install app
 // @Description 安装应用
 // @Accept json
@@ -138,11 +155,10 @@ func (b *BaseApi) GetAppDetailByID(c *gin.Context) {
 // @Success 200 {object} model.AppInstall
 // @Security ApiKeyAuth
 // @Router /apps/install [post]
-// @x-panel-log {"bodyKeys":["name"],"paramKeys":[],"BeforeFuntions":[{"input_colume":"name","input_value":"name","isList":false,"db":"app_installs","output_colume":"app_id","output_value":"appId"},{"info":"appId","isList":false,"db":"apps","output_colume":"key","output_value":"appKey"}],"formatZH":"安装应用 [appKey]-[name]","formatEN":"Install app [appKey]-[name]"}
+// @x-panel-log {"bodyKeys":["name"],"paramKeys":[],"BeforeFunctions":[{"input_column":"name","input_value":"name","isList":false,"db":"app_installs","output_column":"app_id","output_value":"appId"},{"info":"appId","isList":false,"db":"apps","output_column":"key","output_value":"appKey"}],"formatZH":"安装应用 [appKey]-[name]","formatEN":"Install app [appKey]-[name]"}
 func (b *BaseApi) InstallApp(c *gin.Context) {
 	var req request.AppInstallCreate
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
 		return
 	}
 	tx, ctx := helper.GetTxAndContext()

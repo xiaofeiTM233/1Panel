@@ -3,7 +3,7 @@ export namespace Dashboard {
         websiteNumber: number;
         databaseNumber: number;
         cronjobNumber: number;
-        appInstalldNumber: number;
+        appInstalledNumber: number;
 
         hostname: string;
         os: string;
@@ -38,7 +38,11 @@ export namespace Dashboard {
         memoryTotal: number;
         memoryAvailable: number;
         memoryUsed: number;
-        MemoryUsedPercent: number;
+        memoryUsedPercent: number;
+        swapMemoryTotal: number;
+        swapMemoryAvailable: number;
+        swapMemoryUsed: number;
+        swapMemoryUsedPercent: number;
 
         ioReadBytes: number;
         ioWriteBytes: number;

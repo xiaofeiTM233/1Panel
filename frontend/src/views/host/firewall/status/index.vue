@@ -22,11 +22,16 @@
                             {{ $t('commons.button.start') }}
                         </el-button>
                     </span>
+                    <el-divider direction="vertical" />
+                    <el-button type="primary" @click="onOperate('restart')" link>
+                        {{ $t('container.restart') }}
+                    </el-button>
                     <span v-if="onPing !== 'None'">
                         <el-divider direction="vertical" />
                         <el-button type="primary" link>{{ $t('firewall.noPing') }}</el-button>
                         <el-switch
-                            style="margin-left: 10px"
+                            size="small"
+                            class="ml-2"
                             inactive-value="Disable"
                             active-value="Enable"
                             @change="onPingOperate"
@@ -72,6 +77,8 @@ const loadBaseInfo = async (search: boolean) => {
         })
         .catch(() => {
             emit('update:loading', false);
+            emit('update:maskShow', true);
+            emit('update:name', '-');
         });
 };
 

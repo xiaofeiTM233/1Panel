@@ -15,6 +15,7 @@ export const Mimetypes = new Map([
     ['application/x-gzip-compressed', CompressType.TarGz],
     ['gzip/document', CompressType.TarGz],
     ['application/x-xz', CompressType.Xz],
+    ['application/octet-stream', CompressType.Tar],
 ]);
 
 export const Languages = [
@@ -27,12 +28,20 @@ export const Languages = [
         value: ['json'],
     },
     {
+        label: 'lua',
+        value: ['lua'],
+    },
+    {
         label: 'markdown',
         value: ['md'],
     },
     {
         label: 'yaml',
         value: ['yml', 'yaml'],
+    },
+    {
+        label: 'xml',
+        value: ['xml'],
     },
     {
         label: 'php',
@@ -87,6 +96,7 @@ export const Rewrites = [
     'typecho',
     'typecho2',
     'thinkphp',
+    'yii2',
     'laravel5',
     'discuz',
     'discuzx',
@@ -114,10 +124,60 @@ export const Rewrites = [
 
 export const Units = [
     { label: i18n.global.t('commons.units.second'), value: 's' },
-    { label: i18n.global.t('commons.units.miniute'), value: 'm' },
+    { label: i18n.global.t('commons.units.minute'), value: 'm' },
     { label: i18n.global.t('commons.units.hour'), value: 'h' },
     { label: i18n.global.t('commons.units.day'), value: 'd' },
     { label: i18n.global.t('commons.units.week'), value: 'w' },
     { label: i18n.global.t('commons.units.month'), value: 'M' },
-    { label: i18n.global.t('commons.units.year'), value: 'Y' },
+    { label: i18n.global.t('commons.units.year'), value: 'y' },
+];
+
+export const AcmeAccountTypes = [
+    { label: "Let's Encrypt", value: 'letsencrypt' },
+    { label: 'ZeroSSL', value: 'zerossl' },
+    { label: 'Buypass', value: 'buypass' },
+    { label: 'Google Cloud', value: 'google' },
+];
+
+export const KeyTypes = [
+    { label: 'EC 256', value: 'P256' },
+    { label: 'EC 384', value: 'P384' },
+    { label: 'RSA 2048', value: '2048' },
+    { label: 'RSA 3072', value: '3072' },
+    { label: 'RSA 4096', value: '4096' },
+];
+
+export const DNSTypes = [
+    {
+        label: i18n.global.t('website.aliyun'),
+        value: 'AliYun',
+    },
+    {
+        label: i18n.global.t('website.tencentCloud'),
+        value: 'TencentCloud',
+    },
+    {
+        label: 'DNSPod (' + i18n.global.t('ssl.deprecated') + ')',
+        value: 'DnsPod',
+    },
+    {
+        label: 'CloudFlare',
+        value: 'CloudFlare',
+    },
+    {
+        label: 'NameSilo',
+        value: 'NameSilo',
+    },
+    {
+        label: 'NameCheap',
+        value: 'NameCheap',
+    },
+    {
+        label: 'Name.com',
+        value: 'NameCom',
+    },
+    {
+        label: 'GoDaddy',
+        value: 'Godaddy',
+    },
 ];

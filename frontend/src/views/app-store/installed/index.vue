@@ -13,7 +13,7 @@
                         >
                             {{ $t('app.all') }}
                         </el-button>
-                        <div v-for="item in tags" :key="item.key" style="display: inline">
+                        <div v-for="item in tags.slice(0, 6)" :key="item.key" class="inline">
                             <el-button
                                 class="tag-button"
                                 :class="activeTag === item.key ? '' : 'no-active'"
@@ -21,55 +21,70 @@
                                 :type="activeTag === item.key ? 'primary' : ''"
                                 :plain="activeTag !== item.key"
                             >
-                                {{ item.name }}
+                                {{ language == 'zh' || language == 'tw' ? item.name : item.key }}
                             </el-button>
+                        </div>
+                        <div class="inline">
+                            <el-dropdown>
+                                <el-button
+                                    class="tag-button"
+                                    :type="moreTag !== '' ? 'primary' : ''"
+                                    :class="moreTag !== '' ? '' : 'no-active'"
+                                >
+                                    {{ moreTag == '' ? $t('tabs.more') : getTagValue(moreTag) }}
+                                    <el-icon class="el-icon--right">
+                                        <arrow-down />
+                                    </el-icon>
+                                </el-button>
+                                <template #dropdown>
+                                    <el-dropdown-menu>
+                                        <el-dropdown-item
+                                            v-for="item in tags.slice(6)"
+                                            @click="changeTag(item.key)"
+                                            :key="item.key"
+                                        >
+                                            {{ language == 'zh' || language == 'tw' ? item.name : item.key }}
+                                        </el-dropdown-item>
+                                    </el-dropdown-menu>
+                                </template>
+                            </el-dropdown>
                         </div>
                     </div>
                 </el-col>
+
                 <el-col :xs="24" :sm="4" :md="4" :lg="4" :xl="4">
-                    <div class="search-button">
-                        <el-input
-                            class="table-button"
-                            v-model="searchReq.name"
-                            clearable
-                            @clear="search()"
-                            suffix-icon="Search"
-                            @keyup.enter="search()"
-                            @change="search()"
-                            :placeholder="$t('commons.button.search')"
-                        ></el-input>
-                    </div>
+                    <TableSearch @search="search()" v-model:searchName="searchReq.name" />
                 </el-col>
             </el-row>
         </template>
         <template #rightButton>
-            <el-button @click="sync" type="primary" link v-if="mode === 'installed' && data != null">
+            <el-button @click="sync" type="primary" plain v-if="mode === 'installed' && data != null">
                 {{ $t('app.sync') }}
+            </el-button>
+            <el-button @click="openIgnore" type="primary" plain v-if="mode === 'upgrade'">
+                {{ $t('app.showIgnore') }}
             </el-button>
         </template>
 
         <template #main>
+            <el-alert type="info" :closable="false" v-if="mode === 'installed'">
+                <template #title>
+                    <span class="flx-align-center">
+                        {{ $t('app.installHelper') }}
+                        <el-link class="ml-5" icon="Position" @click="quickJump()" type="primary">
+                            {{ $t('firewall.quickJump') }}
+                        </el-link>
+                        　
+                    </span>
+                </template>
+            </el-alert>
+            <el-alert type="info" :title="$t('app.upgradeHelper')" :closable="false" v-if="mode === 'upgrade'" />
             <div class="update-prompt" v-if="data == null">
                 <span>{{ mode === 'upgrade' ? $t('app.updatePrompt') : $t('app.installPrompt') }}</span>
                 <div>
                     <img src="@/assets/images/no_update_app.svg" />
                 </div>
             </div>
-            <el-alert type="info" :closable="false" v-if="mode === 'installed'">
-                <template #default>
-                    <span>
-                        <span>{{ $t('app.installHelper') }}</span>
-                        <el-link
-                            style="font-size: 12px; margin-left: 5px"
-                            icon="Position"
-                            @click="quickJump()"
-                            type="primary"
-                        >
-                            {{ $t('firewall.quickJump') }}
-                        </el-link>
-                    </span>
-                </template>
-            </el-alert>
             <el-row :gutter="5">
                 <el-col
                     v-for="(installed, index) in data"
@@ -85,7 +100,7 @@
                         <el-card class="e-card">
                             <el-row :gutter="20">
                                 <el-col :xs="3" :sm="3" :md="3" :lg="4" :xl="4">
-                                    <div class="icon">
+                                    <div class="icon" @click.stop="openDetail(installed.app)">
                                         <el-avatar
                                             shape="square"
                                             :size="66"
@@ -112,28 +127,47 @@
                                                     :content="installed.message"
                                                 >
                                                     <template #reference>
-                                                        <el-button link type="primary">
-                                                            {{ $t('app.detail') }}
+                                                        <el-button link type="danger">
+                                                            <el-icon><Warning /></el-icon>
                                                         </el-button>
                                                     </template>
                                                 </el-popover>
                                             </span>
-
-                                            <el-tooltip effect="dark" :content="$t('app.toFolder')" placement="top">
-                                                <el-button type="primary" link @click="toFolder(installed.path)">
-                                                    <el-icon>
-                                                        <FolderOpened />
-                                                    </el-icon>
-                                                </el-button>
-                                            </el-tooltip>
+                                            <span class="ml-1">
+                                                <el-tooltip effect="dark" :content="$t('app.toFolder')" placement="top">
+                                                    <el-button type="primary" link @click="toFolder(installed.path)">
+                                                        <el-icon>
+                                                            <FolderOpened />
+                                                        </el-icon>
+                                                    </el-button>
+                                                </el-tooltip>
+                                            </span>
+                                            <span class="ml-1">
+                                                <el-tooltip
+                                                    effect="dark"
+                                                    :content="$t('commons.button.log')"
+                                                    placement="top"
+                                                >
+                                                    <el-button
+                                                        type="primary"
+                                                        link
+                                                        @click="openLog(installed)"
+                                                        :disabled="installed.status === 'DownloadErr'"
+                                                    >
+                                                        <el-icon><Tickets /></el-icon>
+                                                    </el-button>
+                                                </el-tooltip>
+                                            </span>
 
                                             <el-button
                                                 class="h-button"
-                                                type="primary"
                                                 plain
                                                 round
                                                 size="small"
-                                                :disabled="installed.status !== 'Running'"
+                                                :disabled="
+                                                    installed.status !== 'Running' ||
+                                                    installed.app.status === 'TakeDown'
+                                                "
                                                 @click="openUploads(installed.app.key, installed.name)"
                                                 v-if="mode === 'installed'"
                                             >
@@ -141,37 +175,74 @@
                                             </el-button>
                                             <el-button
                                                 class="h-button"
-                                                type="primary"
                                                 plain
                                                 round
                                                 size="small"
-                                                :disabled="installed.status !== 'Running'"
+                                                :disabled="
+                                                    installed.status !== 'Running' ||
+                                                    installed.app.status === 'TakeDown'
+                                                "
                                                 @click="openBackups(installed.app.key, installed.name)"
                                                 v-if="mode === 'installed'"
                                             >
-                                                {{ $t('app.backup') }}
+                                                {{ $t('commons.button.backup') }}
                                             </el-button>
                                             <el-button
                                                 class="h-button"
-                                                type="primary"
                                                 plain
                                                 round
                                                 size="small"
-                                                :disabled="installed.status === 'Running'"
+                                                @click="openOperate(installed, 'ignore')"
+                                                v-if="mode === 'upgrade'"
+                                            >
+                                                {{ $t('commons.button.ignore') }}
+                                            </el-button>
+                                            <el-button
+                                                class="h-button"
+                                                plain
+                                                round
+                                                size="small"
+                                                :disabled="
+                                                    (installed.status !== 'Running' &&
+                                                        installed.status !== 'UpgradeErr') ||
+                                                    installed.app.status === 'TakeDown'
+                                                "
                                                 @click="openOperate(installed, 'upgrade')"
                                                 v-if="mode === 'upgrade'"
                                             >
-                                                {{ $t('app.upgrade') }}
+                                                {{ $t('commons.button.upgrade') }}
                                             </el-button>
                                         </div>
                                         <div class="d-description">
-                                            <el-tag>{{ $t('app.version') }}：{{ installed.version }}</el-tag>
-                                            <el-tag v-if="installed.httpPort > 0">
+                                            <el-button class="tagMargin" plain size="small">
+                                                {{ $t('app.version') }}：{{ installed.version }}
+                                            </el-button>
+
+                                            <el-button
+                                                v-if="installed.httpPort > 0"
+                                                @click="goDashboard(installed.httpPort, 'http')"
+                                                class="tagMargin"
+                                                icon="Position"
+                                                plain
+                                                size="small"
+                                            >
                                                 {{ $t('app.busPort') }}：{{ installed.httpPort }}
-                                            </el-tag>
+                                            </el-button>
+
+                                            <el-button
+                                                v-if="installed.httpsPort > 0"
+                                                @click="goDashboard(installed.httpsPort, 'https')"
+                                                class="tagMargin"
+                                                icon="Position"
+                                                plain
+                                                size="small"
+                                            >
+                                                {{ $t('app.busPort') }}：{{ installed.httpsPort }}
+                                            </el-button>
+
                                             <div class="description">
                                                 <span>
-                                                    {{ $t('app.areadyRun') }}： {{ getAge(installed.createdAt) }}
+                                                    {{ $t('app.alreadyRun') }}： {{ getAge(installed.createdAt) }}
                                                 </span>
                                             </div>
                                         </div>
@@ -183,9 +254,7 @@
                                             <el-button
                                                 v-for="(button, key) in buttons"
                                                 :key="key"
-                                                :type="
-                                                    button.disabled && button.disabled(installed) ? 'info' : 'primary'
-                                                "
+                                                :type="button.disabled && button.disabled(installed) ? 'info' : ''"
                                                 plain
                                                 round
                                                 size="small"
@@ -202,14 +271,27 @@
                     </div>
                 </el-col>
             </el-row>
+            <div class="page-button" v-if="mode === 'installed'">
+                <fu-table-pagination
+                    v-model:current-page="paginationConfig.currentPage"
+                    v-model:page-size="paginationConfig.pageSize"
+                    v-bind="paginationConfig"
+                    @change="search"
+                    :layout="'total, sizes, prev, pager, next, jumper'"
+                />
+            </div>
         </template>
     </LayoutContent>
     <Backups ref="backupRef" @close="search" />
     <Uploads ref="uploadRef" />
-    <AppResources ref="checkRef" />
+    <AppResources ref="checkRef" @close="search" />
     <AppDelete ref="deleteRef" @close="search" />
     <AppParams ref="appParamRef" />
     <AppUpgrade ref="upgradeRef" @close="search" />
+    <PortJumpDialog ref="dialogPortJumpRef" />
+    <AppIgnore ref="ignoreRef" @close="search" />
+    <ComposeLogs ref="composeLogRef" />
+    <AppDetail ref="appDetail" />
 </template>
 
 <script lang="ts" setup>
@@ -225,24 +307,30 @@ import i18n from '@/lang';
 import { ElMessageBox } from 'element-plus';
 import Backups from '@/components/backup/index.vue';
 import Uploads from '@/components/upload/index.vue';
+import PortJumpDialog from '@/components/port-jump/index.vue';
 import AppResources from './check/index.vue';
 import AppDelete from './delete/index.vue';
 import AppParams from './detail/index.vue';
 import AppUpgrade from './upgrade/index.vue';
+import AppIgnore from './ignore/index.vue';
+import AppDetail from '../detail/index.vue';
+import ComposeLogs from '@/components/compose-log/index.vue';
 import { App } from '@/api/interface/app';
 import Status from '@/components/status/index.vue';
 import { getAge } from '@/utils/util';
 import { useRouter } from 'vue-router';
 import { MsgSuccess } from '@/utils/message';
 import { toFolder } from '@/global/business';
+import { useI18n } from 'vue-i18n';
 
 const data = ref<any>();
 const loading = ref(false);
 const syncLoading = ref(false);
 let timer: NodeJS.Timer | null = null;
 const paginationConfig = reactive({
+    cacheSizeKey: 'app-installed-page-size',
     currentPage: 1,
-    pageSize: 20,
+    pageSize: Number(localStorage.getItem('app-installed-page-size')) || 20,
     total: 0,
 });
 const open = ref(false);
@@ -257,11 +345,14 @@ const checkRef = ref();
 const deleteRef = ref();
 const appParamRef = ref();
 const upgradeRef = ref();
+const ignoreRef = ref();
+const dialogPortJumpRef = ref();
+const composeLogRef = ref();
 const tags = ref<App.Tag[]>([]);
 const activeTag = ref('all');
 const searchReq = reactive({
     page: 1,
-    pageSize: 15,
+    pageSize: 20,
     name: '',
     tags: [],
     update: false,
@@ -269,17 +360,27 @@ const searchReq = reactive({
 const router = useRouter();
 const activeName = ref(i18n.global.t('app.installed'));
 const mode = ref('installed');
+const moreTag = ref('');
+const language = useI18n().locale.value;
+const appDetail = ref();
 
 const sync = () => {
-    syncLoading.value = true;
-    SyncInstalledApp()
-        .then(() => {
-            MsgSuccess(i18n.global.t('app.syncSuccess'));
-            search();
+    ElMessageBox.confirm(i18n.global.t('app.syncAllAppHelper'), i18n.global.t('app.sync'), {
+        confirmButtonText: i18n.global.t('commons.button.confirm'),
+        cancelButtonText: i18n.global.t('commons.button.cancel'),
+        type: 'info',
+    })
+        .then(async () => {
+            syncLoading.value = true;
+            try {
+                await SyncInstalledApp();
+                MsgSuccess(i18n.global.t('app.syncSuccess'));
+                search();
+            } finally {
+                syncLoading.value = false;
+            }
         })
-        .finally(() => {
-            syncLoading.value = false;
-        });
+        .catch(() => {});
 };
 
 const changeTag = (key: string) => {
@@ -288,13 +389,27 @@ const changeTag = (key: string) => {
     if (key !== 'all') {
         searchReq.tags = [key];
     }
+    const index = tags.value.findIndex((tag) => tag.key === key);
+    if (index > 5) {
+        moreTag.value = key;
+    } else {
+        moreTag.value = '';
+    }
     search();
+};
+
+const getTagValue = (key: string) => {
+    const tag = tags.value.find((tag) => tag.key === key);
+    if (tag) {
+        return language == 'zh' || language == 'tw' ? tag.name : tag.key;
+    }
 };
 
 const search = () => {
     loading.value = true;
     searchReq.page = paginationConfig.currentPage;
     searchReq.pageSize = paginationConfig.pageSize;
+    localStorage.setItem('app-installed', searchReq.pageSize + '');
     SearchAppInstalled(searchReq)
         .then((res) => {
             data.value = res.data.items;
@@ -308,16 +423,24 @@ const search = () => {
     });
 };
 
+const goDashboard = async (port: any, protocol: string) => {
+    dialogPortJumpRef.value.acceptParams({ port: port, protocol: protocol });
+};
+
+const openDetail = (app: App.App) => {
+    appDetail.value.acceptParams(app.key, 'detail');
+};
+
 const openOperate = (row: any, op: string) => {
     operateReq.installId = row.id;
     operateReq.operate = op;
-    if (op == 'upgrade') {
-        upgradeRef.value.acceptParams(row.id, row.name);
+    if (op == 'upgrade' || op == 'ignore') {
+        upgradeRef.value.acceptParams(row.id, row.name, op, row.app);
     } else if (op == 'delete') {
         AppInstalledDeleteCheck(row.id).then(async (res) => {
             const items = res.data;
             if (res.data && res.data.length > 0) {
-                checkRef.value.acceptParams({ items: items });
+                checkRef.value.acceptParams({ items: items, key: row.app.key, installID: row.id });
             } else {
                 deleteRef.value.acceptParams(row);
             }
@@ -327,6 +450,10 @@ const openOperate = (row: any, op: string) => {
     }
 };
 
+const openIgnore = () => {
+    ignoreRef.value.acceptParams();
+};
+
 const operate = async () => {
     open.value = false;
     loading.value = true;
@@ -334,6 +461,9 @@ const operate = async () => {
         .then(() => {
             MsgSuccess(i18n.global.t('commons.msg.operationSuccess'));
             search();
+            setTimeout(() => {
+                search();
+            }, 1500);
         })
         .catch(() => {
             search();
@@ -364,7 +494,7 @@ const buttons = [
             openOperate(row, 'sync');
         },
         disabled: (row: any) => {
-            return row.status === 'DownloadErr' || row.status === 'Upgrading';
+            return row.status === 'DownloadErr' || row.status === 'Upgrading' || row.status === 'Rebuilding';
         },
     },
     {
@@ -373,7 +503,7 @@ const buttons = [
             openOperate(row, 'rebuild');
         },
         disabled: (row: any) => {
-            return row.status === 'DownloadErr' || row.status === 'Upgrading';
+            return row.status === 'DownloadErr' || row.status === 'Upgrading' || row.status === 'Rebuilding';
         },
     },
     {
@@ -382,7 +512,7 @@ const buttons = [
             openOperate(row, 'restart');
         },
         disabled: (row: any) => {
-            return row.status === 'DownloadErr' || row.status === 'Upgrading';
+            return row.status === 'DownloadErr' || row.status === 'Upgrading' || row.status === 'Rebuilding';
         },
     },
     {
@@ -395,7 +525,8 @@ const buttons = [
                 row.status === 'Running' ||
                 row.status === 'Error' ||
                 row.status === 'DownloadErr' ||
-                row.status === 'Upgrading'
+                row.status === 'Upgrading' ||
+                row.status === 'Rebuilding'
             );
         },
     },
@@ -405,11 +536,16 @@ const buttons = [
             openOperate(row, 'stop');
         },
         disabled: (row: any) => {
-            return row.status !== 'Running' || row.status === 'DownloadErr' || row.status === 'Upgrading';
+            return (
+                row.status !== 'Running' ||
+                row.status === 'DownloadErr' ||
+                row.status === 'Upgrading' ||
+                row.status === 'Rebuilding'
+            );
         },
     },
     {
-        label: i18n.global.t('app.delete'),
+        label: i18n.global.t('commons.button.uninstall'),
         click: (row: any) => {
             openOperate(row, 'delete');
         },
@@ -420,7 +556,7 @@ const buttons = [
             openParam(row);
         },
         disabled: (row: any) => {
-            return row.status === 'DownloadErr' || row.status === 'Upgrading';
+            return row.status === 'DownloadErr' || row.status === 'Upgrading' || row.status === 'Rebuilding';
         },
     },
 ];
@@ -448,11 +584,15 @@ const openParam = (row: any) => {
 };
 
 const isAppErr = (row: any) => {
-    return row.status.includes('Err') || row.status.includes('Error');
+    return row.status.includes('Err') || row.status.includes('Error') || row.status.includes('UnHealthy');
 };
 
 const quickJump = () => {
     router.push({ name: 'ContainerSetting' });
+};
+
+const openLog = (row: any) => {
+    composeLogRef.value.acceptParams({ compose: row.path + '/docker-compose.yml', resource: row.name });
 };
 
 onMounted(() => {
@@ -465,7 +605,7 @@ onMounted(() => {
     search();
     timer = setInterval(() => {
         search();
-    }, 10000 * 6);
+    }, 1000 * 60);
 });
 
 onUnmounted(() => {

@@ -14,6 +14,7 @@ import (
 	"github.com/1Panel-dev/1Panel/backend/constant"
 	"github.com/1Panel-dev/1Panel/backend/global"
 	"github.com/1Panel-dev/1Panel/backend/utils/cmd"
+	"github.com/1Panel-dev/1Panel/backend/utils/common"
 	"github.com/1Panel-dev/1Panel/backend/utils/compose"
 	"github.com/1Panel-dev/1Panel/backend/utils/files"
 	"github.com/pkg/errors"
@@ -34,16 +35,17 @@ func (u *BackupService) RedisBackup() error {
 	}
 	global.LOG.Infof("appendonly in redis conf is %s", appendonly)
 
-	timeNow := time.Now().Format("20060102150405")
+	timeNow := time.Now().Format("20060102150405") + common.RandStrAndNum(5)
 	fileName := fmt.Sprintf("%s.rdb", timeNow)
 	if appendonly == "yes" {
-		if redisInfo.Version == "6.0.16" {
+		if strings.HasPrefix(redisInfo.Version, "6.") {
 			fileName = fmt.Sprintf("%s.aof", timeNow)
 		} else {
 			fileName = fmt.Sprintf("%s.tar.gz", timeNow)
 		}
 	}
-	backupDir := fmt.Sprintf("%s/database/redis/%s", localDir, redisInfo.Name)
+	itemDir := fmt.Sprintf("database/redis/%s", redisInfo.Name)
+	backupDir := path.Join(localDir, itemDir)
 	if err := handleRedisBackup(redisInfo, backupDir, fileName); err != nil {
 		return err
 	}
@@ -51,7 +53,7 @@ func (u *BackupService) RedisBackup() error {
 		Type:       "redis",
 		Source:     "LOCAL",
 		BackupType: "LOCAL",
-		FileDir:    backupDir,
+		FileDir:    itemDir,
 		FileName:   fileName,
 	}
 	if err := backupRepo.CreateRecord(record); err != nil {
@@ -111,7 +113,7 @@ func handleRedisBackup(redisInfo *repo.RootInfo, backupDir, fileName string) err
 func handleRedisRecover(redisInfo *repo.RootInfo, recoverFile string, isRollback bool) error {
 	fileOp := files.NewFileOp()
 	if !fileOp.Stat(recoverFile) {
-		return fmt.Errorf("%s file is not exist", recoverFile)
+		return buserr.WithName("ErrFileNotFound", recoverFile)
 	}
 
 	appendonly, err := configGetStr(redisInfo.ContainerName, redisInfo.Password, "appendonly")
@@ -120,10 +122,10 @@ func handleRedisRecover(redisInfo *repo.RootInfo, recoverFile string, isRollback
 	}
 
 	if appendonly == "yes" {
-		if redisInfo.Version == "6.0.16" && !strings.HasSuffix(recoverFile, ".aof") {
+		if strings.HasPrefix(redisInfo.Version, "6.") && !strings.HasSuffix(recoverFile, ".aof") {
 			return buserr.New(constant.ErrTypeOfRedis)
 		}
-		if redisInfo.Version == "7.0.5" && !strings.HasSuffix(recoverFile, ".tar.gz") {
+		if strings.HasPrefix(redisInfo.Version, "7.") && !strings.HasSuffix(recoverFile, ".tar.gz") {
 			return buserr.New(constant.ErrTypeOfRedis)
 		}
 	} else {
@@ -137,13 +139,13 @@ func handleRedisRecover(redisInfo *repo.RootInfo, recoverFile string, isRollback
 	if !isRollback {
 		suffix := "rdb"
 		if appendonly == "yes" {
-			if redisInfo.Version == "6.0.16" {
+			if strings.HasPrefix(redisInfo.Version, "6.") {
 				suffix = "aof"
 			} else {
 				suffix = "tar.gz"
 			}
 		}
-		rollbackFile := fmt.Sprintf("%s/original/database/redis/%s_%s.%s", global.CONF.System.BaseDir, redisInfo.Name, time.Now().Format("20060102150405"), suffix)
+		rollbackFile := path.Join(global.CONF.System.TmpDir, fmt.Sprintf("database/redis/%s_%s.%s", redisInfo.Name, time.Now().Format("20060102150405"), suffix))
 		if err := handleRedisBackup(redisInfo, path.Dir(rollbackFile), path.Base(rollbackFile)); err != nil {
 			return fmt.Errorf("backup database %s for rollback before recover failed, err: %v", redisInfo.Name, err)
 		}
@@ -165,14 +167,14 @@ func handleRedisRecover(redisInfo *repo.RootInfo, recoverFile string, isRollback
 	if _, err := compose.Down(composeDir + "/docker-compose.yml"); err != nil {
 		return err
 	}
-	if appendonly == "yes" && redisInfo.Version == "7.0.5" {
+	if appendonly == "yes" && strings.HasPrefix(redisInfo.Version, "7.") {
 		redisDataDir := fmt.Sprintf("%s/%s/%s/data", constant.AppInstallDir, "redis", redisInfo.Name)
 		if err := handleUnTar(recoverFile, redisDataDir); err != nil {
 			return err
 		}
 	} else {
 		itemName := "dump.rdb"
-		if appendonly == "yes" && redisInfo.Version == "6.0.16" {
+		if appendonly == "yes" && strings.HasPrefix(redisInfo.Version, "6.") {
 			itemName = "appendonly.aof"
 		}
 		input, err := os.ReadFile(recoverFile)

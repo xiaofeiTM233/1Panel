@@ -13,6 +13,16 @@ type AppDatabase struct {
 
 type AuthParam struct {
 	RootPassword string `json:"PANEL_DB_ROOT_PASSWORD"`
+	RootUser     string `json:"PANEL_DB_ROOT_USER"`
+}
+
+type RedisAuthParam struct {
+	RootPassword string `json:"PANEL_REDIS_ROOT_PASSWORD"`
+}
+
+type MinioAuthParam struct {
+	RootPassword string `json:"PANEL_MINIO_ROOT_PASSWORD"`
+	RootUser     string `json:"PANEL_MINIO_ROOT_USER"`
 }
 
 type ContainerExec struct {
@@ -63,7 +73,8 @@ type LocalAppInstallDefine struct {
 }
 
 type ExtraProperties struct {
-	Tags []Tag `json:"tags"`
+	Tags    []Tag  `json:"tags"`
+	Version string `json:"version"`
 }
 
 type AppProperty struct {
@@ -93,6 +104,7 @@ type AppConfigVersion struct {
 type Tag struct {
 	Key  string `json:"key"`
 	Name string `json:"name"`
+	Sort int    `json:"sort"`
 }
 
 type AppForm struct {
@@ -127,4 +139,10 @@ type AppResource struct {
 var AppToolMap = map[string]string{
 	"mysql": "phpmyadmin",
 	"redis": "redis-commander",
+}
+
+type AppInstallInfo struct {
+	ID   uint   `json:"id"`
+	Key  string `json:"key"`
+	Name string `json:"name"`
 }

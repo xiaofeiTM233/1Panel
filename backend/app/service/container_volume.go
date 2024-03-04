@@ -9,6 +9,7 @@ import (
 	"github.com/1Panel-dev/1Panel/backend/app/dto"
 	"github.com/1Panel-dev/1Panel/backend/buserr"
 	"github.com/1Panel-dev/1Panel/backend/constant"
+	"github.com/1Panel-dev/1Panel/backend/utils/common"
 	"github.com/1Panel-dev/1Panel/backend/utils/docker"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/volume"
@@ -19,16 +20,16 @@ func (u *ContainerService) PageVolume(req dto.SearchWithPage) (int64, interface{
 	if err != nil {
 		return 0, nil, err
 	}
-	list, err := client.VolumeList(context.TODO(), filters.NewArgs())
+	list, err := client.VolumeList(context.TODO(), volume.ListOptions{})
 	if err != nil {
 		return 0, nil, err
 	}
 	if len(req.Info) != 0 {
-		lenth, count := len(list.Volumes), 0
-		for count < lenth {
+		length, count := len(list.Volumes), 0
+		for count < length {
 			if !strings.Contains(list.Volumes[count].Name, req.Info) {
 				list.Volumes = append(list.Volumes[:count], list.Volumes[(count+1):]...)
-				lenth--
+				length--
 			} else {
 				count++
 			}
@@ -51,15 +52,20 @@ func (u *ContainerService) PageVolume(req dto.SearchWithPage) (int64, interface{
 		records = list.Volumes[start:end]
 	}
 
+	nyc, _ := time.LoadLocation(common.LoadTimeZone())
 	for _, item := range records {
 		tag := make([]string, 0)
 		for _, val := range item.Labels {
 			tag = append(tag, val)
 		}
-		if len(item.CreatedAt) > 19 {
-			item.CreatedAt = item.CreatedAt[0:19]
+		var createTime time.Time
+		if strings.Contains(item.CreatedAt, "Z") {
+			createTime, _ = time.ParseInLocation("2006-01-02T15:04:05Z", item.CreatedAt, nyc)
+		} else if strings.Contains(item.CreatedAt, "+") {
+			createTime, _ = time.ParseInLocation("2006-01-02T15:04:05+08:00", item.CreatedAt, nyc)
+		} else {
+			createTime, _ = time.ParseInLocation("2006-01-02T15:04:05", item.CreatedAt, nyc)
 		}
-		createTime, _ := time.Parse("2006-01-02T15:04:05", item.CreatedAt)
 		data = append(data, dto.Volume{
 			CreatedAt:  createTime,
 			Name:       item.Name,
@@ -76,17 +82,20 @@ func (u *ContainerService) ListVolume() ([]dto.Options, error) {
 	if err != nil {
 		return nil, err
 	}
-	list, err := client.VolumeList(context.TODO(), filters.NewArgs())
+	list, err := client.VolumeList(context.TODO(), volume.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
-	var data []dto.Options
+	var datas []dto.Options
 	for _, item := range list.Volumes {
-		data = append(data, dto.Options{
+		datas = append(datas, dto.Options{
 			Option: item.Name,
 		})
 	}
-	return data, nil
+	sort.Slice(datas, func(i, j int) bool {
+		return datas[i].Option < datas[j].Option
+	})
+	return datas, nil
 }
 func (u *ContainerService) DeleteVolume(req dto.BatchDelete) error {
 	client, err := docker.NewDockerClient()
@@ -103,14 +112,14 @@ func (u *ContainerService) DeleteVolume(req dto.BatchDelete) error {
 	}
 	return nil
 }
-func (u *ContainerService) CreateVolume(req dto.VolumeCreat) error {
+func (u *ContainerService) CreateVolume(req dto.VolumeCreate) error {
 	client, err := docker.NewDockerClient()
 	if err != nil {
 		return err
 	}
-	var array []filters.KeyValuePair
-	array = append(array, filters.Arg("name", req.Name))
-	vos, _ := client.VolumeList(context.TODO(), filters.NewArgs(array...))
+	arg := filters.NewArgs()
+	arg.Add("name", req.Name)
+	vos, _ := client.VolumeList(context.TODO(), volume.ListOptions{Filters: arg})
 	if len(vos.Volumes) != 0 {
 		for _, v := range vos.Volumes {
 			if v.Name == req.Name {

@@ -5,10 +5,13 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/1Panel-dev/1Panel/backend/app/dto"
 	"github.com/1Panel-dev/1Panel/backend/app/model"
+	"github.com/1Panel-dev/1Panel/backend/buserr"
 	"github.com/1Panel-dev/1Panel/backend/constant"
 	"github.com/1Panel-dev/1Panel/backend/global"
 	"github.com/jinzhu/copier"
@@ -27,8 +30,10 @@ type ICronjobService interface {
 	UpdateStatus(id uint, status string) error
 	Delete(req dto.CronjobBatchDelete) error
 	Download(down dto.CronjobDownload) (string, error)
-	StartJob(cronjob *model.Cronjob) (int, error)
+	StartJob(cronjob *model.Cronjob) (string, error)
 	CleanRecord(req dto.CronjobClean) error
+
+	LoadRecordLog(req dto.OperateByID) (string, error)
 }
 
 func NewICronjobService() ICronjobService {
@@ -36,26 +41,18 @@ func NewICronjobService() ICronjobService {
 }
 
 func (u *CronjobService) SearchWithPage(search dto.SearchWithPage) (int64, interface{}, error) {
-	total, cronjobs, err := cronjobRepo.Page(search.Page, search.PageSize, commonRepo.WithLikeName(search.Info))
+	total, cronjobs, err := cronjobRepo.Page(search.Page, search.PageSize, commonRepo.WithLikeName(search.Info), commonRepo.WithOrderRuleBy(search.OrderBy, search.Order))
 	var dtoCronjobs []dto.CronjobInfo
 	for _, cronjob := range cronjobs {
 		var item dto.CronjobInfo
 		if err := copier.Copy(&item, &cronjob); err != nil {
 			return 0, nil, errors.WithMessage(constant.ErrStructTransform, err.Error())
 		}
-		if item.Type == "website" || item.Type == "database" || item.Type == "directory" {
-			backup, _ := backupRepo.Get(commonRepo.WithByID(uint(item.TargetDirID)))
-			if len(backup.Type) != 0 {
-				item.TargetDir = backup.Type
-			}
-		} else {
-			item.TargetDir = "-"
-		}
 		record, _ := cronjobRepo.RecordFirst(cronjob.ID)
 		if record.ID != 0 {
-			item.LastRecrodTime = record.StartTime.Format("2006-01-02 15:04:05")
+			item.LastRecordTime = record.StartTime.Format("2006-01-02 15:04:05")
 		} else {
-			item.LastRecrodTime = "-"
+			item.LastRecordTime = "-"
 		}
 		dtoCronjobs = append(dtoCronjobs, item)
 	}
@@ -80,29 +77,43 @@ func (u *CronjobService) SearchRecords(search dto.SearchRecord) (int64, interfac
 	return total, dtoCronjobs, err
 }
 
+func (u *CronjobService) LoadRecordLog(req dto.OperateByID) (string, error) {
+	record, err := cronjobRepo.GetRecord(commonRepo.WithByID(req.ID))
+	if err != nil {
+		return "", err
+	}
+	if _, err := os.Stat(record.Records); err != nil {
+		return "", buserr.New("ErrHttpReqNotFound")
+	}
+	content, err := os.ReadFile(record.Records)
+	if err != nil {
+		return "", err
+	}
+	return string(content), nil
+}
+
 func (u *CronjobService) CleanRecord(req dto.CronjobClean) error {
 	cronjob, err := cronjobRepo.Get(commonRepo.WithByID(req.CronjobID))
 	if err != nil {
 		return err
 	}
-	if req.CleanData && (cronjob.Type == "database" || cronjob.Type == "website" || cronjob.Type == "directory") {
-		cronjob.RetainCopies = 0
-		backup, err := backupRepo.Get(commonRepo.WithByID(uint(cronjob.TargetDirID)))
-		if err != nil {
-			return err
-		}
-		if backup.Type != "LOCAL" {
-			localDir, err := loadLocalDir()
+	if req.CleanData {
+		if hasBackup(cronjob.Type) {
+			accountMap, err := loadClientMap(cronjob.BackupAccounts)
 			if err != nil {
 				return err
 			}
-			client, err := NewIBackupService().NewClient(&backup)
-			if err != nil {
-				return err
-			}
-			u.HandleRmExpired(backup.Type, localDir, &cronjob, client)
+			cronjob.RetainCopies = 0
+			u.removeExpiredBackup(cronjob, accountMap, model.BackupRecord{})
 		} else {
-			u.HandleRmExpired(backup.Type, "", &cronjob, nil)
+			u.removeExpiredLog(cronjob)
+		}
+	}
+	if req.IsDelete {
+		records, _ := backupRepo.ListRecord(backupRepo.WithByCronID(cronjob.ID))
+		for _, records := range records {
+			records.CronjobID = 0
+			_ = backupRepo.UpdateRecord(&records)
 		}
 	}
 	delRecords, err := cronjobRepo.ListRecord(cronjobRepo.WithByJobID(int(req.CronjobID)))
@@ -123,29 +134,27 @@ func (u *CronjobService) Download(down dto.CronjobDownload) (string, error) {
 	if record.ID == 0 {
 		return "", constant.ErrRecordNotFound
 	}
-	cronjob, _ := cronjobRepo.Get(commonRepo.WithByID(record.CronjobID))
-	if cronjob.ID == 0 {
-		return "", constant.ErrRecordNotFound
-	}
 	backup, _ := backupRepo.Get(commonRepo.WithByID(down.BackupAccountID))
-	if cronjob.ID == 0 {
+	if backup.ID == 0 {
 		return "", constant.ErrRecordNotFound
 	}
 	if backup.Type == "LOCAL" || record.FromLocal {
 		if _, err := os.Stat(record.File); err != nil && os.IsNotExist(err) {
-			return "", constant.ErrRecordNotFound
+			return "", err
 		}
 		return record.File, nil
 	}
-	client, err := NewIBackupService().NewClient(&backup)
-	if err != nil {
-		return "", err
-	}
 	tempPath := fmt.Sprintf("%s/download/%s", constant.DataDir, record.File)
-	_ = os.MkdirAll(path.Dir(tempPath), os.ModePerm)
-	isOK, err := client.Download(record.File, tempPath)
-	if !isOK || err != nil {
-		return "", constant.ErrRecordNotFound
+	if _, err := os.Stat(tempPath); err != nil && os.IsNotExist(err) {
+		client, err := NewIBackupService().NewClient(&backup)
+		if err != nil {
+			return "", err
+		}
+		_ = os.MkdirAll(path.Dir(tempPath), os.ModePerm)
+		isOK, err := client.Download(record.File, tempPath)
+		if !isOK || err != nil {
+			return "", err
+		}
 	}
 	return tempPath, nil
 }
@@ -168,30 +177,40 @@ func (u *CronjobService) Create(cronjobDto dto.CronjobCreate) error {
 		return errors.WithMessage(constant.ErrStructTransform, err.Error())
 	}
 	cronjob.Status = constant.StatusEnable
-	cronjob.Spec = loadSpec(cronjob)
 
 	global.LOG.Infof("create cronjob %s successful, spec: %s", cronjob.Name, cronjob.Spec)
-	entryID, err := u.StartJob(&cronjob)
+	spec := cronjob.Spec
+	entryIDs, err := u.StartJob(&cronjob)
 	if err != nil {
 		return err
 	}
-	cronjob.EntryID = uint64(entryID)
+	cronjob.Spec = spec
+	cronjob.EntryIDs = entryIDs
 	if err := cronjobRepo.Create(&cronjob); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (u *CronjobService) StartJob(cronjob *model.Cronjob) (int, error) {
-	if cronjob.EntryID != 0 {
-		global.Cron.Remove(cron.EntryID(cronjob.EntryID))
+func (u *CronjobService) StartJob(cronjob *model.Cronjob) (string, error) {
+	if len(cronjob.EntryIDs) != 0 {
+		ids := strings.Split(cronjob.EntryIDs, ",")
+		for _, id := range ids {
+			idItem, _ := strconv.Atoi(id)
+			global.Cron.Remove(cron.EntryID(idItem))
+		}
 	}
-	entryID, err := u.AddCronJob(cronjob)
-	if err != nil {
-		return 0, err
+	specs := strings.Split(cronjob.Spec, ",")
+	var ids []string
+	for _, spec := range specs {
+		cronjob.Spec = spec
+		entryID, err := u.AddCronJob(cronjob)
+		if err != nil {
+			return "", err
+		}
+		ids = append(ids, fmt.Sprintf("%v", entryID))
 	}
-	global.LOG.Debug(global.Cron.Entries())
-	return entryID, nil
+	return strings.Join(ids, ","), nil
 }
 
 func (u *CronjobService) Delete(req dto.CronjobBatchDelete) error {
@@ -200,9 +219,13 @@ func (u *CronjobService) Delete(req dto.CronjobBatchDelete) error {
 		if cronjob.ID == 0 {
 			return errors.New("find cronjob in db failed")
 		}
-		global.Cron.Remove(cron.EntryID(cronjob.EntryID))
-		global.LOG.Infof("stop cronjob entryID: %d", cronjob.EntryID)
-		if err := u.CleanRecord(dto.CronjobClean{CronjobID: id, CleanData: req.CleanData}); err != nil {
+		ids := strings.Split(cronjob.EntryIDs, ",")
+		for _, id := range ids {
+			idItem, _ := strconv.Atoi(id)
+			global.Cron.Remove(cron.EntryID(idItem))
+		}
+		global.LOG.Infof("stop cronjob entryID: %s", cronjob.EntryIDs)
+		if err := u.CleanRecord(dto.CronjobClean{CronjobID: id, CleanData: req.CleanData, IsDelete: true}); err != nil {
 			return err
 		}
 		if err := cronjobRepo.Delete(commonRepo.WithByID(id)); err != nil {
@@ -222,31 +245,38 @@ func (u *CronjobService) Update(id uint, req dto.CronjobUpdate) error {
 	if err != nil {
 		return constant.ErrRecordNotFound
 	}
-	cronjob.EntryID = cronModel.EntryID
+	upMap := make(map[string]interface{})
+	cronjob.EntryIDs = cronModel.EntryIDs
 	cronjob.Type = cronModel.Type
-	cronjob.Spec = loadSpec(cronjob)
-	newEntryID, err := u.StartJob(&cronjob)
-	if err != nil {
-		return err
+	spec := cronjob.Spec
+	if cronModel.Status == constant.StatusEnable {
+		newEntryIDs, err := u.StartJob(&cronjob)
+		if err != nil {
+			return err
+		}
+		upMap["entry_ids"] = newEntryIDs
+	} else {
+		ids := strings.Split(cronjob.EntryIDs, ",")
+		for _, id := range ids {
+			idItem, _ := strconv.Atoi(id)
+			global.Cron.Remove(cron.EntryID(idItem))
+		}
 	}
 
-	upMap := make(map[string]interface{})
-	upMap["entry_id"] = newEntryID
 	upMap["name"] = req.Name
-	upMap["spec"] = cronjob.Spec
+	upMap["spec"] = spec
 	upMap["script"] = req.Script
-	upMap["spec_type"] = req.SpecType
-	upMap["week"] = req.Week
-	upMap["day"] = req.Day
-	upMap["hour"] = req.Hour
-	upMap["minute"] = req.Minute
+	upMap["container_name"] = req.ContainerName
+	upMap["app_id"] = req.AppID
 	upMap["website"] = req.Website
 	upMap["exclusion_rules"] = req.ExclusionRules
+	upMap["db_type"] = req.DBType
 	upMap["db_name"] = req.DBName
 	upMap["url"] = req.URL
 	upMap["source_dir"] = req.SourceDir
-	upMap["keep_local"] = req.KeepLocal
-	upMap["target_dir_id"] = req.TargetDirID
+
+	upMap["backup_accounts"] = req.BackupAccounts
+	upMap["default_download"] = req.DefaultDownload
 	upMap["retain_copies"] = req.RetainCopies
 	return cronjobRepo.Update(id, upMap)
 }
@@ -257,19 +287,23 @@ func (u *CronjobService) UpdateStatus(id uint, status string) error {
 		return errors.WithMessage(constant.ErrRecordNotFound, "record not found")
 	}
 	var (
-		entryID int
-		err     error
+		entryIDs string
+		err      error
 	)
 	if status == constant.StatusEnable {
-		entryID, err = u.StartJob(&cronjob)
+		entryIDs, err = u.StartJob(&cronjob)
 		if err != nil {
 			return err
 		}
 	} else {
-		global.Cron.Remove(cron.EntryID(cronjob.EntryID))
-		global.LOG.Infof("stop cronjob entryID: %d", cronjob.EntryID)
+		ids := strings.Split(cronjob.EntryIDs, ",")
+		for _, id := range ids {
+			idItem, _ := strconv.Atoi(id)
+			global.Cron.Remove(cron.EntryID(idItem))
+		}
+		global.LOG.Infof("stop cronjob entryID: %s", cronjob.EntryIDs)
 	}
-	return cronjobRepo.Update(cronjob.ID, map[string]interface{}{"status": status, "entry_id": entryID})
+	return cronjobRepo.Update(cronjob.ID, map[string]interface{}{"status": status, "entry_ids": entryIDs})
 }
 
 func (u *CronjobService) AddCronJob(cronjob *model.Cronjob) (int, error) {
@@ -304,27 +338,4 @@ func mkdirAndWriteFile(cronjob *model.Cronjob, startTime time.Time, msg []byte) 
 	_, _ = write.WriteString(string(msg))
 	write.Flush()
 	return path, nil
-}
-
-func loadSpec(cronjob model.Cronjob) string {
-	switch cronjob.SpecType {
-	case "perMonth":
-		return fmt.Sprintf("%v %v %v * *", cronjob.Minute, cronjob.Hour, cronjob.Day)
-	case "perWeek":
-		return fmt.Sprintf("%v %v * * %v", cronjob.Minute, cronjob.Hour, cronjob.Week)
-	case "perNDay":
-		return fmt.Sprintf("%v %v */%v * *", cronjob.Minute, cronjob.Hour, cronjob.Day)
-	case "perDay":
-		return fmt.Sprintf("%v %v * * *", cronjob.Minute, cronjob.Hour)
-	case "perNHour":
-		return fmt.Sprintf("%v */%v * * *", cronjob.Minute, cronjob.Hour)
-	case "perHour":
-		return fmt.Sprintf("%v * * * *", cronjob.Minute)
-	case "perNMinute":
-		return fmt.Sprintf("@every %vm", cronjob.Minute)
-	case "perNSecond":
-		return fmt.Sprintf("@every %vs", cronjob.Second)
-	default:
-		return ""
-	}
 }

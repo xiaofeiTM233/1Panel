@@ -1,10 +1,13 @@
 <template>
     <div>
-        <el-drawer v-model="upVisiable" :destroy-on-close="true" :close-on-click-modal="false" size="50%">
+        <el-drawer v-model="upVisible" :destroy-on-close="true" :close-on-click-modal="false" size="50%">
             <template #header>
                 <DrawerHeader :header="$t('commons.button.import')" :resource="title" :back="handleClose" />
             </template>
             <div v-loading="loading">
+                <div class="mb-4" v-if="type === 'mysql' || type === 'mariadb'">
+                    <el-alert type="error" :title="$t('database.formatHelper', [remark])" />
+                </div>
                 <el-upload ref="uploadRef" drag :on-change="fileOnChange" class="upload-demo" :auto-upload="false">
                     <el-icon class="el-icon--upload"><upload-filled /></el-icon>
                     <div class="el-upload__text">
@@ -16,15 +19,19 @@
                             v-if="isUpload"
                             text-inside
                             :stroke-width="12"
-                            :percentage="uploadPrecent"
+                            :percentage="uploadPercent"
                         ></el-progress>
-                        <div v-if="type === 'mysql'" class="el-upload__tip">
+                        <div
+                            v-if="type === 'mysql' || type === 'mariadb' || type === 'postgresql'"
+                            style="width: 80%"
+                            class="el-upload__tip"
+                        >
                             <span class="input-help">{{ $t('database.supportUpType') }}</span>
                             <span class="input-help">
                                 {{ $t('database.zipFormat') }}
                             </span>
                         </div>
-                        <div v-else class="el-upload__tip">
+                        <div v-else style="width: 80%" class="el-upload__tip">
                             <span class="input-help">{{ $t('website.supportUpType') }}</span>
                             <span class="input-help">
                                 {{ $t('website.zipFormat', [type + '.json']) }}
@@ -60,13 +67,13 @@
                             {{ computeSize(row.size) }}
                         </template>
                     </el-table-column>
-                    <el-table-column :label="$t('commons.table.createdAt')" min-width="80" fix>
+                    <el-table-column show-overflow-tooltip :label="$t('commons.table.createdAt')" min-width="90" fix>
                         <template #default="{ row }">
                             {{ row.createdAt }}
                         </template>
                     </el-table-column>
                     <fu-table-operations
-                        width="300px"
+                        width="150px"
                         :buttons="buttons"
                         :ellipsis="10"
                         :label="$t('commons.table.operate')"
@@ -75,13 +82,14 @@
                 </ComplexTable>
             </div>
         </el-drawer>
+
+        <OpDialog ref="opRef" @search="search" />
     </div>
 </template>
 
 <script lang="ts" setup>
 import { reactive, ref } from 'vue';
 import { computeSize } from '@/utils/util';
-import { useDeleteData } from '@/hooks/use-delete-data';
 import { handleRecoverByUpload } from '@/api/modules/setting';
 import i18n from '@/lang';
 import { UploadFile, UploadFiles, UploadInstance } from 'element-plus';
@@ -93,45 +101,58 @@ import { MsgError, MsgSuccess } from '@/utils/message';
 
 const loading = ref();
 const isUpload = ref();
-const uploadPrecent = ref<number>(0);
+const uploadPercent = ref<number>(0);
 const selects = ref<any>([]);
 const baseDir = ref();
+const opRef = ref();
 
 const data = ref();
 const title = ref();
 const paginationConfig = reactive({
+    cacheSizeKey: 'upload-page-size',
     currentPage: 1,
     pageSize: 10,
     total: 0,
 });
 
-const upVisiable = ref(false);
+const upVisible = ref(false);
 const type = ref();
 const name = ref();
 const detailName = ref();
+const remark = ref();
 interface DialogProps {
     type: string;
     name: string;
     detailName: string;
+    remark: string;
 }
 const acceptParams = async (params: DialogProps): Promise<void> => {
     type.value = params.type;
     name.value = params.name;
     detailName.value = params.detailName;
+    remark.value = params.remark;
 
     const pathRes = await loadBaseDir();
-    if (type.value === 'mysql') {
-        title.value = name.value + ' [ ' + detailName.value + ' ]';
+    switch (type.value) {
+        case 'mysql':
+        case 'mariadb':
+        case 'postgresql':
+            title.value = name.value + ' [ ' + detailName.value + ' ]';
+            if (detailName.value) {
+                baseDir.value = `${pathRes.data}/uploads/database/${type.value}/${name.value}/${detailName.value}/`;
+            } else {
+                baseDir.value = `${pathRes.data}/uploads/database/${type.value}/${name.value}/`;
+            }
+            break;
+        case 'website':
+            title.value = name.value;
+            baseDir.value = `${pathRes.data}/uploads/database/${type.value}/${detailName.value}/`;
+            break;
+        case 'app':
+            title.value = name.value;
+            baseDir.value = `${pathRes.data}/uploads/database/${type.value}/${name.value}/`;
     }
-    if (type.value === 'website' || type.value === 'app') {
-        title.value = name.value;
-    }
-    if (detailName.value) {
-        baseDir.value = `${pathRes.data}/uploads/${type.value}/${name.value}/${detailName.value}/`;
-    } else {
-        baseDir.value = `${pathRes.data}/uploads/${type.value}/${name.value}/`;
-    }
-    upVisiable.value = true;
+    upVisible.value = true;
     search();
 };
 
@@ -147,22 +168,31 @@ const search = async () => {
 };
 
 const onRecover = async (row: File.File) => {
-    let params = {
-        source: 'LOCAL',
-        type: type.value,
-        name: name.value,
-        detailName: detailName.value,
-        file: baseDir.value + row.name,
-    };
-    loading.value = true;
-    await handleRecoverByUpload(params)
-        .then(() => {
-            loading.value = false;
-            MsgSuccess(i18n.global.t('commons.msg.operationSuccess'));
-        })
-        .catch(() => {
-            loading.value = false;
-        });
+    ElMessageBox.confirm(
+        i18n.global.t('commons.msg.recoverHelper', [row.name]),
+        i18n.global.t('commons.button.recover'),
+        {
+            confirmButtonText: i18n.global.t('commons.button.confirm'),
+            cancelButtonText: i18n.global.t('commons.button.cancel'),
+        },
+    ).then(async () => {
+        let params = {
+            source: 'LOCAL',
+            type: type.value,
+            name: name.value,
+            detailName: detailName.value,
+            file: baseDir.value + row.name,
+        };
+        loading.value = true;
+        await handleRecoverByUpload(params)
+            .then(() => {
+                loading.value = false;
+                MsgSuccess(i18n.global.t('commons.msg.operationSuccess'));
+            })
+            .catch(() => {
+                loading.value = false;
+            });
+    });
 };
 
 const uploaderFiles = ref<UploadFiles>([]);
@@ -190,7 +220,7 @@ const fileOnChange = (_uploadFile: UploadFile, uploadFiles: UploadFiles) => {
 const handleClose = () => {
     uploaderFiles.value = [];
     uploadRef.value!.clearFiles();
-    upVisiable.value = false;
+    upVisible.value = false;
 };
 
 const onSubmit = async () => {
@@ -208,7 +238,7 @@ const onSubmit = async () => {
         return;
     }
     const res = await CheckFile(baseDir.value + file.raw.name);
-    if (!res.data) {
+    if (res.data) {
         MsgError(i18n.global.t('commons.msg.fileExist'));
         return;
     }
@@ -245,7 +275,7 @@ const submitUpload = async (file: any) => {
                     const progress = Math.round(
                         ((uploadedChunkCount + progressEvent.loaded / progressEvent.total) * 100) / chunkCount,
                     );
-                    uploadPrecent.value = progress;
+                    uploadPercent.value = progress;
                 },
             });
             uploadedChunkCount++;
@@ -265,15 +295,26 @@ const submitUpload = async (file: any) => {
 
 const onBatchDelete = async (row: File.File | null) => {
     let files: Array<string> = [];
+    let names: Array<string> = [];
     if (row) {
         files.push(baseDir.value + row.name);
+        names.push(row.name);
     } else {
         selects.value.forEach((item: File.File) => {
             files.push(baseDir.value + item.name);
+            names.push(item.name);
         });
     }
-    await useDeleteData(BatchDeleteFile, { paths: files, isDir: false }, 'commons.msg.delete');
-    search();
+    opRef.value.acceptParams({
+        title: i18n.global.t('commons.button.delete'),
+        names: names,
+        msg: i18n.global.t('commons.msg.operatorHelper', [
+            i18n.global.t('commons.button.import'),
+            i18n.global.t('commons.button.delete'),
+        ]),
+        api: BatchDeleteFile,
+        params: { paths: files, isDir: false },
+    });
 };
 
 const buttons = [

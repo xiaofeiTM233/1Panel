@@ -1,6 +1,6 @@
 <template>
     <div>
-        <el-drawer v-model="drawerVisiable" :destroy-on-close="true" :close-on-click-modal="false" size="30%">
+        <el-drawer v-model="drawerVisible" :destroy-on-close="true" :close-on-click-modal="false" size="30%">
             <template #header>
                 <DrawerHeader :header="$t('setting.panelPort')" :back="handleClose" />
             </template>
@@ -15,7 +15,7 @@
             </el-form>
             <template #footer>
                 <span class="dialog-footer">
-                    <el-button @click="drawerVisiable = false">{{ $t('commons.button.cancel') }}</el-button>
+                    <el-button @click="drawerVisible = false">{{ $t('commons.button.cancel') }}</el-button>
                     <el-button :disabled="loading" type="primary" @click="onSavePort(formRef)">
                         {{ $t('commons.button.confirm') }}
                     </el-button>
@@ -32,12 +32,13 @@ import { updatePort } from '@/api/modules/setting';
 import { ElMessageBox, FormInstance } from 'element-plus';
 import { Rules } from '@/global/form-rules';
 import { GlobalStore } from '@/store';
+import DrawerHeader from '@/components/drawer-header/index.vue';
 const globalStore = GlobalStore();
 
 interface DialogProps {
     serverPort: number;
 }
-const drawerVisiable = ref();
+const drawerVisible = ref();
 const loading = ref();
 
 const form = reactive({
@@ -48,7 +49,7 @@ const formRef = ref<FormInstance>();
 
 const acceptParams = (params: DialogProps): void => {
     form.serverPort = params.serverPort;
-    drawerVisiable.value = true;
+    drawerVisible.value = true;
 };
 
 const onSavePort = async (formEl: FormInstance | undefined) => {
@@ -71,7 +72,14 @@ const onSavePort = async (formEl: FormInstance | undefined) => {
                     globalStore.isLogin = false;
                     let href = window.location.href;
                     let ip = href.split('//')[1].split(':')[0];
-                    window.open(`${href.split('//')[0]}//${ip}:${form.serverPort}/${globalStore.entrance}`, '_self');
+                    if (globalStore.entrance) {
+                        window.open(
+                            `${href.split('//')[0]}//${ip}:${form.serverPort}/${globalStore.entrance}`,
+                            '_self',
+                        );
+                    } else {
+                        window.open(`${href.split('//')[0]}//${ip}:${form.serverPort}/login`, '_self');
+                    }
                 })
                 .catch(() => {
                     loading.value = false;
@@ -81,7 +89,7 @@ const onSavePort = async (formEl: FormInstance | undefined) => {
 };
 
 const handleClose = () => {
-    drawerVisiable.value = false;
+    drawerVisible.value = false;
 };
 
 defineExpose({

@@ -13,14 +13,19 @@ export interface GlobalState {
     isLogin: boolean;
     entrance: string;
     csrfToken: string;
-    language: string; // zh | en
+    language: string; // zh | en | tw
     // assemblySize: string; // small | default | large
     themeConfig: ThemeConfigProp;
     isFullScreen: boolean;
+    isOnRestart: boolean;
     agreeLicense: boolean;
     hasNewVersion: boolean;
     ignoreCaptcha: boolean;
     device: DeviceType;
+    lastFilePath: string;
+    currentDB: string;
+    showEntranceWarn: boolean;
+    defaultNetwork: string;
 }
 
 export interface MenuState {

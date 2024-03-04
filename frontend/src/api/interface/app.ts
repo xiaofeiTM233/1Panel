@@ -12,6 +12,7 @@ export namespace App {
         source: string;
         type: string;
         status: string;
+        limit: number;
     }
 
     export interface AppDTO extends App {
@@ -22,6 +23,7 @@ export namespace App {
     export interface Tag {
         key: string;
         name: string;
+        sort: number;
     }
 
     export interface AppResPage {
@@ -41,8 +43,8 @@ export namespace App {
         readme: string;
         params: AppParams;
         dockerCompose: string;
-        enbale: boolean;
         image: string;
+        hostMode?: boolean;
     }
 
     export interface AppReq extends ReqPage {
@@ -84,6 +86,7 @@ export namespace App {
     export interface ServiceParam {
         label: '';
         value: '';
+        from?: '';
     }
 
     export interface AppInstall {
@@ -105,7 +108,7 @@ export namespace App {
 
     export interface AppInstalled extends CommonModel {
         name: string;
-        appId: string;
+        appId: number;
         appDetailId: string;
         env: string;
         status: string;
@@ -115,6 +118,12 @@ export namespace App {
         canUpdate: boolean;
         path: string;
         app: App;
+    }
+
+    export interface AppInstalledInfo {
+        id: number;
+        key: string;
+        name: string;
     }
 
     export interface CheckInstalled {
@@ -128,11 +137,17 @@ export namespace App {
         appInstallId: number;
         containerName: string;
         installPath: string;
+        httpPort: number;
+        httpsPort: number;
     }
 
     export interface DatabaseConnInfo {
+        username: string;
         password: string;
+        privilege: boolean;
+        containerName: string;
         serviceName: string;
+        systemIP: string;
         port: number;
     }
     export interface AppInstallResource {
@@ -149,15 +164,17 @@ export namespace App {
         deleteBackup?: boolean;
     }
 
-    export interface AppInstalledSearch {
+    export interface AppInstalledSearch extends ReqPage {
         type: string;
         unused?: boolean;
+        all?: boolean;
     }
 
     export interface AppService {
         label: string;
         value: string;
         config?: Object;
+        from?: string;
     }
 
     export interface VersionDetail {
@@ -186,5 +203,14 @@ export namespace App {
         memoryUnit: string;
         containerName: string;
         allowPort: boolean;
+        dockerCompose: string;
+        hostMode?: boolean;
+    }
+
+    export interface IgnoredApp {
+        name: string;
+        detailID: number;
+        version: string;
+        icon: string;
     }
 }

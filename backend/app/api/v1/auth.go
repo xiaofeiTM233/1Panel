@@ -1,6 +1,8 @@
 package v1
 
 import (
+	"encoding/base64"
+
 	"github.com/1Panel-dev/1Panel/backend/app/api/v1/helper"
 	"github.com/1Panel-dev/1Panel/backend/app/dto"
 	"github.com/1Panel-dev/1Panel/backend/app/model"
@@ -17,23 +19,29 @@ type BaseApi struct{}
 // @Summary User login
 // @Description 用户登录
 // @Accept json
+// @Param EntranceCode header string true "安全入口 base64 加密串"
 // @Param request body dto.Login true "request"
 // @Success 200 {object} dto.UserLoginInfo
 // @Router /auth/login [post]
 func (b *BaseApi) Login(c *gin.Context) {
 	var req dto.Login
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
 		return
 	}
+
 	if req.AuthMethod != "jwt" && !req.IgnoreCaptcha {
 		if err := captcha.VerifyCode(req.CaptchaID, req.Captcha); err != nil {
 			helper.ErrorWithDetail(c, constant.CodeErrInternalServer, constant.ErrTypeInternalServer, err)
 			return
 		}
 	}
+	entranceItem := c.Request.Header.Get("EntranceCode")
+	var entrance []byte
+	if len(entranceItem) != 0 {
+		entrance, _ = base64.StdEncoding.DecodeString(entranceItem)
+	}
 
-	user, err := authService.Login(c, req)
+	user, err := authService.Login(c, req, string(entrance))
 	go saveLoginLogs(c, err)
 	if err != nil {
 		helper.ErrorWithDetail(c, constant.CodeErrInternalServer, constant.ErrTypeInternalServer, err)
@@ -49,18 +57,20 @@ func (b *BaseApi) Login(c *gin.Context) {
 // @Param request body dto.MFALogin true "request"
 // @Success 200 {object} dto.UserLoginInfo
 // @Router /auth/mfalogin [post]
+// @Header 200 {string} EntranceCode "安全入口"
 func (b *BaseApi) MFALogin(c *gin.Context) {
 	var req dto.MFALogin
-	if err := c.ShouldBindJSON(&req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
-		return
-	}
-	if err := global.VALID.Struct(req); err != nil {
-		helper.ErrorWithDetail(c, constant.CodeErrBadRequest, constant.ErrTypeInvalidParams, err)
+	if err := helper.CheckBindAndValidate(&req, c); err != nil {
 		return
 	}
 
-	user, err := authService.MFALogin(c, req)
+	entranceItem := c.Request.Header.Get("EntranceCode")
+	var entrance []byte
+	if len(entranceItem) != 0 {
+		entrance, _ = base64.StdEncoding.DecodeString(entranceItem)
+	}
+
+	user, err := authService.MFALogin(c, req, string(entrance))
 	if err != nil {
 		helper.ErrorWithDetail(c, constant.CodeErrInternalServer, constant.ErrTypeInternalServer, err)
 		return
@@ -103,7 +113,12 @@ func (b *BaseApi) Captcha(c *gin.Context) {
 // @Router /auth/issafety [get]
 func (b *BaseApi) CheckIsSafety(c *gin.Context) {
 	code := c.DefaultQuery("code", "")
-	helper.SuccessWithData(c, authService.CheckIsSafety(code))
+	status, err := authService.CheckIsSafety(code)
+	if err != nil {
+		helper.ErrorWithDetail(c, constant.CodeErrInternalServer, constant.ErrTypeInternalServer, err)
+		return
+	}
+	helper.SuccessWithData(c, status)
 }
 
 // @Tags Auth
@@ -113,6 +128,20 @@ func (b *BaseApi) CheckIsSafety(c *gin.Context) {
 // @Router /auth/demo [get]
 func (b *BaseApi) CheckIsDemo(c *gin.Context) {
 	helper.SuccessWithData(c, global.CONF.System.IsDemo)
+}
+
+// @Tags Auth
+// @Summary Load System Language
+// @Description 获取系统语言设置
+// @Success 200
+// @Router /auth/language [get]
+func (b *BaseApi) GetLanguage(c *gin.Context) {
+	settingInfo, err := settingService.GetSettingInfo()
+	if err != nil {
+		helper.ErrorWithDetail(c, constant.CodeErrInternalServer, constant.ErrTypeInternalServer, err)
+		return
+	}
+	helper.SuccessWithData(c, settingInfo.Language)
 }
 
 func saveLoginLogs(c *gin.Context, err error) {

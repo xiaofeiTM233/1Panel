@@ -7,9 +7,15 @@ export namespace Backup {
         accessKey: string;
         bucket: string;
         credential: string;
+        backupPath: string;
         vars: string;
         varsJson: object;
         createdAt: Date;
+    }
+    export interface OneDriveInfo {
+        client_id: string;
+        client_secret: string;
+        redirect_uri: string;
     }
     export interface BackupOperate {
         id: number;
@@ -17,6 +23,7 @@ export namespace Backup {
         accessKey: string;
         bucket: string;
         credential: string;
+        backupPath: string;
         vars: string;
     }
     export interface RecordDownload {
@@ -42,6 +49,9 @@ export namespace Backup {
         type: string;
         name: string;
         detailName: string;
+    }
+    export interface SearchBackupRecordByCronjob extends ReqPage {
+        cronjobID: number;
     }
     export interface Backup {
         type: string;

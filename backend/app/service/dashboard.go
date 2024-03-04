@@ -2,10 +2,14 @@ package service
 
 import (
 	"encoding/json"
+	"fmt"
+	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/1Panel-dev/1Panel/backend/app/dto"
+	"github.com/1Panel-dev/1Panel/backend/global"
 	"github.com/1Panel-dev/1Panel/backend/utils/cmd"
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/disk"
@@ -20,11 +24,31 @@ type DashboardService struct{}
 type IDashboardService interface {
 	LoadBaseInfo(ioOption string, netOption string) (*dto.DashboardBase, error)
 	LoadCurrentInfo(ioOption string, netOption string) *dto.DashboardCurrent
+
+	Restart(operation string) error
 }
 
 func NewIDashboardService() IDashboardService {
 	return &DashboardService{}
 }
+
+func (u *DashboardService) Restart(operation string) error {
+	if operation != "1panel" && operation != "system" {
+		return fmt.Errorf("handle restart operation %s failed, err: nonsupport such operation", operation)
+	}
+	itemCmd := fmt.Sprintf("%s 1pctl restart", cmd.SudoHandleCmd())
+	if operation == "system" {
+		itemCmd = fmt.Sprintf("%s reboot", cmd.SudoHandleCmd())
+	}
+	go func() {
+		stdout, err := cmd.Exec(itemCmd)
+		if err != nil {
+			global.LOG.Errorf("handle %s failed, err: %v", itemCmd, stdout)
+		}
+	}()
+	return nil
+}
+
 func (u *DashboardService) LoadBaseInfo(ioOption string, netOption string) (*dto.DashboardBase, error) {
 	var baseInfo dto.DashboardBase
 	hostInfo, err := host.Info()
@@ -45,7 +69,7 @@ func (u *DashboardService) LoadBaseInfo(ioOption string, netOption string) (*dto
 	if err != nil {
 		return nil, err
 	}
-	baseInfo.AppInstalldNumber = len(appInstall)
+	baseInfo.AppInstalledNumber = len(appInstall)
 	dbs, err := mysqlRepo.List()
 	if err != nil {
 		return nil, err
@@ -56,11 +80,11 @@ func (u *DashboardService) LoadBaseInfo(ioOption string, netOption string) (*dto
 		return nil, err
 	}
 	baseInfo.WebsiteNumber = len(website)
-	cornjobs, err := cronjobRepo.List()
+	cronjobs, err := cronjobRepo.List()
 	if err != nil {
 		return nil, err
 	}
-	baseInfo.CronjobNumber = len(cornjobs)
+	baseInfo.CronjobNumber = len(cronjobs)
 
 	cpuInfo, err := cpu.Info()
 	if err == nil {
@@ -100,6 +124,12 @@ func (u *DashboardService) LoadCurrentInfo(ioOption string, netOption string) *d
 	currentInfo.MemoryAvailable = memoryInfo.Available
 	currentInfo.MemoryUsed = memoryInfo.Used
 	currentInfo.MemoryUsedPercent = memoryInfo.UsedPercent
+
+	swapInfo, _ := mem.SwapMemory()
+	currentInfo.SwapMemoryTotal = swapInfo.Total
+	currentInfo.SwapMemoryAvailable = swapInfo.Free
+	currentInfo.SwapMemoryUsed = swapInfo.Used
+	currentInfo.SwapMemoryUsedPercent = swapInfo.UsedPercent
 
 	currentInfo.DiskData = loadDiskInfo()
 
@@ -151,7 +181,7 @@ type diskInfo struct {
 
 func loadDiskInfo() []dto.DiskInfo {
 	var datas []dto.DiskInfo
-	stdout, err := cmd.Exec("df -hT -P|grep '/'|grep -v tmpfs|grep -v 'snap/core'|grep -v udev")
+	stdout, err := cmd.ExecWithTimeOut("df -hT -P|grep '/'|grep -v tmpfs|grep -v 'snap/core'|grep -v udev", 2*time.Second)
 	if err != nil {
 		return datas
 	}
@@ -185,24 +215,52 @@ func loadDiskInfo() []dto.DiskInfo {
 		mounts = append(mounts, diskInfo{Type: fields[1], Device: fields[0], Mount: fields[6]})
 	}
 
+	var (
+		wg sync.WaitGroup
+		mu sync.Mutex
+	)
+	wg.Add(len(mounts))
 	for i := 0; i < len(mounts); i++ {
-		state, err := disk.Usage(mounts[i].Mount)
-		if err != nil {
-			continue
-		}
-		var itemData dto.DiskInfo
-		itemData.Path = mounts[i].Mount
-		itemData.Type = mounts[i].Type
-		itemData.Device = mounts[i].Device
-		itemData.Total = state.Total
-		itemData.Free = state.Free
-		itemData.Used = state.Used
-		itemData.UsedPercent = state.UsedPercent
-		itemData.InodesTotal = state.InodesTotal
-		itemData.InodesUsed = state.InodesUsed
-		itemData.InodesFree = state.InodesFree
-		itemData.InodesUsedPercent = state.InodesUsedPercent
-		datas = append(datas, itemData)
+		go func(timeoutCh <-chan time.Time, mount diskInfo) {
+			defer wg.Done()
+
+			var itemData dto.DiskInfo
+			itemData.Path = mount.Mount
+			itemData.Type = mount.Type
+			itemData.Device = mount.Device
+			select {
+			case <-timeoutCh:
+				mu.Lock()
+				datas = append(datas, itemData)
+				mu.Unlock()
+				global.LOG.Errorf("load disk info from %s failed, err: timeout", mount.Mount)
+			default:
+				state, err := disk.Usage(mount.Mount)
+				if err != nil {
+					mu.Lock()
+					datas = append(datas, itemData)
+					mu.Unlock()
+					global.LOG.Errorf("load disk info from %s failed, err: %v", mount.Mount, err)
+					return
+				}
+				itemData.Total = state.Total
+				itemData.Free = state.Free
+				itemData.Used = state.Used
+				itemData.UsedPercent = state.UsedPercent
+				itemData.InodesTotal = state.InodesTotal
+				itemData.InodesUsed = state.InodesUsed
+				itemData.InodesFree = state.InodesFree
+				itemData.InodesUsedPercent = state.InodesUsedPercent
+				mu.Lock()
+				datas = append(datas, itemData)
+				mu.Unlock()
+			}
+		}(time.After(5*time.Second), mounts[i])
 	}
+	wg.Wait()
+
+	sort.Slice(datas, func(i, j int) bool {
+		return datas[i].Path < datas[j].Path
+	})
 	return datas
 }

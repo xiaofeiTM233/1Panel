@@ -1,7 +1,7 @@
 <template>
     <div v-if="persistenceShow">
         <el-row :gutter="20" style="margin-top: 5px" class="row-box">
-            <el-col :span="12">
+            <el-col :xs="24" :sm="12" :md="12" :lg="12" :xl="12">
                 <el-card class="el-card">
                     <template #header>
                         <div class="card-header">
@@ -36,7 +36,7 @@
                     </el-form>
                 </el-card>
             </el-col>
-            <el-col :span="12">
+            <el-col :xs="24" :sm="12" :md="12" :lg="12" :xl="12">
                 <el-card class="el-card">
                     <template #header>
                         <div class="card-header">
@@ -81,7 +81,7 @@
         <el-card style="margin-top: 20px">
             <ComplexTable :pagination-config="paginationConfig" v-model:selects="selects" @search="search" :data="data">
                 <template #toolbar>
-                    <el-button type="primary" @click="onBackup">{{ $t('setting.backup') }}</el-button>
+                    <el-button type="primary" @click="onBackup">{{ $t('commons.button.backup') }}</el-button>
                     <el-button type="primary" plain :disabled="selects.length === 0" @click="onBatchDelete(null)">
                         {{ $t('commons.button.delete') }}
                     </el-button>
@@ -107,6 +107,7 @@
             </ComplexTable>
         </el-card>
 
+        <OpDialog ref="opRef" @search="search" />
         <ConfirmDialog ref="confirmDialogRef" @confirm="onRecover"></ConfirmDialog>
     </div>
 </template>
@@ -121,7 +122,6 @@ import { dateFormat } from '@/utils/util';
 import i18n from '@/lang';
 import { FormInstance } from 'element-plus';
 import { reactive, ref } from 'vue';
-import { useDeleteData } from '@/hooks/use-delete-data';
 import { MsgInfo, MsgSuccess } from '@/utils/message';
 import { Backup } from '@/api/interface/backup';
 
@@ -139,6 +139,7 @@ const rules = reactive({
     appendfsync: [Rules.requiredSelect],
 });
 const formRef = ref<FormInstance>();
+const opRef = ref();
 
 interface DialogProps {
     status: string;
@@ -158,6 +159,7 @@ const selects = ref<any>([]);
 const currentRow = ref();
 const confirmDialogRef = ref();
 const paginationConfig = reactive({
+    cacheSizeKey: 'redis-backup-page-size',
     currentPage: 1,
     pageSize: 10,
     total: 0,
@@ -219,15 +221,26 @@ const onRecover = async () => {
 
 const onBatchDelete = async (row: Backup.RecordInfo | null) => {
     let ids: Array<number> = [];
+    let names: Array<string> = [];
     if (row) {
         ids.push(row.id);
+        names.push(row.fileName);
     } else {
         selects.value.forEach((item: Backup.RecordInfo) => {
             ids.push(item.id);
+            names.push(item.fileName);
         });
     }
-    await useDeleteData(deleteBackupRecord, { ids: ids }, 'commons.msg.delete');
-    search();
+    opRef.value.acceptParams({
+        title: i18n.global.t('commons.button.delete'),
+        names: names,
+        msg: i18n.global.t('commons.msg.operatorHelper', [
+            i18n.global.t('commons.button.backup'),
+            i18n.global.t('commons.button.delete'),
+        ]),
+        api: deleteBackupRecord,
+        params: { ids: ids },
+    });
 };
 
 const buttons = [
@@ -278,10 +291,10 @@ const onSave = async (formEl: FormInstance | undefined, type: string) => {
             MsgInfo(i18n.global.t('database.rdbInfo'));
             return;
         }
-        itemSaves.push(item.second + '', item.count + '');
+        itemSaves.push(item.second + ' ' + item.count);
     }
     param.type = type;
-    param.save = itemSaves.join(' ');
+    param.save = itemSaves.join(',');
     emit('loading', true);
     await updateRedisPersistenceConf(param)
         .then(() => {

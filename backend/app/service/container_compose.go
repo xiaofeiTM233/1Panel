@@ -14,8 +14,10 @@ import (
 
 	"github.com/1Panel-dev/1Panel/backend/app/dto"
 	"github.com/1Panel-dev/1Panel/backend/app/model"
+	"github.com/1Panel-dev/1Panel/backend/buserr"
 	"github.com/1Panel-dev/1Panel/backend/constant"
 	"github.com/1Panel-dev/1Panel/backend/global"
+	"github.com/1Panel-dev/1Panel/backend/utils/cmd"
 	"github.com/1Panel-dev/1Panel/backend/utils/compose"
 	"github.com/1Panel-dev/1Panel/backend/utils/docker"
 	"github.com/docker/docker/api/types"
@@ -92,7 +94,7 @@ func (u *ContainerService) PageCompose(req dto.SearchWithPage) (int64, interface
 		}
 	}
 	for _, item := range composeCreatedByLocal {
-		if err := composeRepo.DeleteRecord(commonRepo.WithByName(item.Name)); err != nil {
+		if err := composeRepo.DeleteRecord(commonRepo.WithByID(item.ID)); err != nil {
 			global.LOG.Error(err)
 		}
 	}
@@ -101,11 +103,11 @@ func (u *ContainerService) PageCompose(req dto.SearchWithPage) (int64, interface
 		records = append(records, value)
 	}
 	if len(req.Info) != 0 {
-		lenth, count := len(records), 0
-		for count < lenth {
+		length, count := len(records), 0
+		for count < length {
 			if !strings.Contains(records[count].Name, req.Info) {
 				records = append(records[:count], records[(count+1):]...)
-				lenth--
+				length--
 			} else {
 				count++
 			}
@@ -127,6 +129,13 @@ func (u *ContainerService) PageCompose(req dto.SearchWithPage) (int64, interface
 }
 
 func (u *ContainerService) TestCompose(req dto.ComposeCreate) (bool, error) {
+	if cmd.CheckIllegal(req.Path) {
+		return false, buserr.New(constant.ErrCmdIllegal)
+	}
+	composeItem, _ := composeRepo.GetRecord(commonRepo.WithByName(req.Name))
+	if composeItem.ID != 0 {
+		return false, constant.ErrRecordExist
+	}
 	if err := u.loadPath(&req); err != nil {
 		return false, err
 	}
@@ -139,16 +148,26 @@ func (u *ContainerService) TestCompose(req dto.ComposeCreate) (bool, error) {
 }
 
 func (u *ContainerService) CreateCompose(req dto.ComposeCreate) (string, error) {
+	if cmd.CheckIllegal(req.Name, req.Path) {
+		return "", buserr.New(constant.ErrCmdIllegal)
+	}
 	if err := u.loadPath(&req); err != nil {
 		return "", err
 	}
 	global.LOG.Infof("docker-compose.yml %s create successful, start to docker-compose up", req.Name)
 
 	if req.From == "path" {
-		req.Name = path.Base(strings.ReplaceAll(req.Path, "/"+path.Base(req.Path), ""))
+		req.Name = path.Base(path.Dir(req.Path))
 	}
-	logName := path.Dir(req.Path) + "/compose.log"
-	file, err := os.OpenFile(logName, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
+
+	dockerLogDir := path.Join(global.CONF.System.TmpDir, "docker_logs")
+	if _, err := os.Stat(dockerLogDir); err != nil && os.IsNotExist(err) {
+		if err = os.MkdirAll(dockerLogDir, os.ModePerm); err != nil {
+			return "", err
+		}
+	}
+	logItem := fmt.Sprintf("%s/compose_create_%s_%s.log", dockerLogDir, req.Name, time.Now().Format("20060102150405"))
+	file, err := os.OpenFile(logItem, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
 	if err != nil {
 		return "", err
 	}
@@ -169,10 +188,13 @@ func (u *ContainerService) CreateCompose(req dto.ComposeCreate) (string, error) 
 		_, _ = file.WriteString("docker-compose up successful!")
 	}()
 
-	return logName, nil
+	return path.Base(logItem), nil
 }
 
 func (u *ContainerService) ComposeOperation(req dto.ComposeOperation) error {
+	if cmd.CheckIllegal(req.Path, req.Operation) {
+		return buserr.New(constant.ErrCmdIllegal)
+	}
 	if _, err := os.Stat(req.Path); err != nil {
 		return fmt.Errorf("load file with path %s failed, %v", req.Path, err)
 	}
@@ -191,7 +213,11 @@ func (u *ContainerService) ComposeOperation(req dto.ComposeOperation) error {
 }
 
 func (u *ContainerService) ComposeUpdate(req dto.ComposeUpdate) error {
-	if _, err := os.Stat(req.Path); err != nil {
+	if cmd.CheckIllegal(req.Name, req.Path) {
+		return buserr.New(constant.ErrCmdIllegal)
+	}
+	oldFile, err := os.ReadFile(req.Path)
+	if err != nil {
 		return fmt.Errorf("load file with path %s failed, %v", req.Path, err)
 	}
 	file, err := os.OpenFile(req.Path, os.O_WRONLY|os.O_TRUNC, 0640)
@@ -205,10 +231,16 @@ func (u *ContainerService) ComposeUpdate(req dto.ComposeUpdate) error {
 
 	global.LOG.Infof("docker-compose.yml %s has been replaced, now start to docker-compose restart", req.Path)
 	if stdout, err := compose.Down(req.Path); err != nil {
-		return errors.New(string(stdout))
+		if err := recreateCompose(string(oldFile), req.Path); err != nil {
+			return fmt.Errorf("update failed when handle compose down, err: %s, recreate failed: %v", string(stdout), err)
+		}
+		return fmt.Errorf("update failed when handle compose down, err: %s", string(stdout))
 	}
 	if stdout, err := compose.Up(req.Path); err != nil {
-		return errors.New(string(stdout))
+		if err := recreateCompose(string(oldFile), req.Path); err != nil {
+			return fmt.Errorf("update failed when handle compose up, err: %s, recreate failed: %v", string(stdout), err)
+		}
+		return fmt.Errorf("update failed when handle compose up, err: %s", string(stdout))
 	}
 
 	return nil
@@ -233,6 +265,22 @@ func (u *ContainerService) loadPath(req *dto.ComposeCreate) error {
 		_, _ = write.WriteString(string(req.File))
 		write.Flush()
 		req.Path = path
+	}
+	return nil
+}
+
+func recreateCompose(content, path string) error {
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_TRUNC, 0640)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	write := bufio.NewWriter(file)
+	_, _ = write.WriteString(content)
+	write.Flush()
+
+	if stdout, err := compose.Up(path); err != nil {
+		return errors.New(string(stdout))
 	}
 	return nil
 }
